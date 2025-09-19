@@ -5,214 +5,372 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.expressora.components.top_nav.TopNav
+import coil.compose.AsyncImage
+import com.example.expressora.R
 import com.example.expressora.components.bottom_nav.BottomNav
+import com.example.expressora.components.top_nav3.TopNav3
 import com.example.expressora.dashboard.user.community_space.CommunitySpaceActivity
 import com.example.expressora.dashboard.user.learn.LearnActivity
-import com.example.expressora.dashboard.user.notification.NotificationActivity
-import com.example.expressora.dashboard.user.profile.ProfileActivity
 import com.example.expressora.dashboard.user.translation.TranslationActivity
 import com.example.expressora.ui.theme.InterFontFamily
+import kotlinx.coroutines.delay
 
 class QuizActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            QuizDifficultyScreen()
-        }
+        setContent { QuizApp() }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuizDifficultyScreen() {
+fun QuizApp() {
     val context = LocalContext.current
+    var currentScreen by remember { mutableStateOf("difficulty") }
+    var selectedDifficulty by remember { mutableStateOf("") }
+    val completedDifficulties = remember { mutableStateListOf<String>() }
 
-    val bgColor = Color(0xFFF8F8F8)
-    val primaryColor = Color(0xFFFACC15)
-    val textColor = Color.Black
-
-    Scaffold(topBar = {
-        TopNav(notificationCount = 2, onProfileClick = {
-            context.startActivity(Intent(context, ProfileActivity::class.java))
-        }, onTranslateClick = {
-            context.startActivity(
-                Intent(
-                    context, CommunitySpaceActivity::class.java
-                )
-            )
-        }, onNotificationClick = {
-            context.startActivity(Intent(context, NotificationActivity::class.java))
-        })
-    }, bottomBar = {
-        BottomNav(onLearnClick = {
-            context.startActivity(Intent(context, LearnActivity::class.java))
-        }, onCameraClick = {
-            context.startActivity(Intent(context, TranslationActivity::class.java))
-        }, onQuizClick = {
-            context.startActivity(Intent(context, QuizActivity::class.java))
-        })
-    }) { paddingValues ->
-
-        var selectedDifficulty by remember { mutableStateOf("") }
-
-        Column(
+    Scaffold(
+        topBar = {
+            TopNav3(onTranslateClick = {
+                context.startActivity(Intent(context, CommunitySpaceActivity::class.java))
+            })
+        }, bottomBar = {
+            BottomNav(
+                onLearnClick = {
+                    context.startActivity(
+                        Intent(
+                            context, LearnActivity::class.java
+                        )
+                    )
+                },
+                onCameraClick = {
+                    context.startActivity(
+                        Intent(
+                            context, TranslationActivity::class.java
+                        )
+                    )
+                },
+                onQuizClick = { context.startActivity(Intent(context, QuizActivity::class.java)) })
+        }, containerColor = Color(0xFFF8F8F8)
+    ) { paddingValues ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(bgColor)
                 .padding(paddingValues)
-                .padding(horizontal = 24.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.Start
         ) {
-            Text(
-                text = "Start Quiz",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = InterFontFamily,
-                color = textColor
-            )
+            when (currentScreen) {
+                "difficulty" -> QuizDifficultyScreen(
+                    selectedDifficulty = selectedDifficulty,
+                    completedDifficulties = completedDifficulties,
+                    onDifficultySelected = { difficulty ->
+                        selectedDifficulty = difficulty
+                        currentScreen = "question"
+                    })
 
-            Spacer(modifier = Modifier.height(4.dp))
+                "question" -> QuizQuestionScreen(
+                    difficulty = selectedDifficulty, onComplete = {
+                        if (selectedDifficulty.isNotEmpty() && !completedDifficulties.contains(
+                                selectedDifficulty
+                            )
+                        ) {
+                            completedDifficulties.add(selectedDifficulty)
+                        }
+                        currentScreen = "completion"
+                    })
 
-            Text(
-                text = "Choose your difficulty level",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = InterFontFamily,
-                color = Color.DarkGray
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                DifficultyCard(
-                    label = "🟢 Easy",
-                    isSelected = selectedDifficulty == "Easy",
-                    onClick = { selectedDifficulty = "Easy" },
-                    baseColor = Color(0xFFDFF8E2),
-                    gradientColors = listOf(Color(0xFFA9E5A0), Color(0xFFDFF8E2)),
-                    borderColor = Color(0xFF79C36A),
-                    selectedElevation = 12.dp
-                )
-                DifficultyCard(
-                    label = "🟡 Medium",
-                    isSelected = selectedDifficulty == "Medium",
-                    onClick = { selectedDifficulty = "Medium" },
-                    baseColor = Color(0xFFFFF6D1),
-                    gradientColors = listOf(Color(0xFFFBEA87), Color(0xFFFFF6D1)),
-                    borderColor = Color(0xFFFACC15),
-                    selectedElevation = 12.dp
-                )
-                DifficultyCard(
-                    label = "🔴 Hard",
-                    isSelected = selectedDifficulty == "Hard",
-                    onClick = { selectedDifficulty = "Hard" },
-                    baseColor = Color(0xFFFFE6E6),
-                    gradientColors = listOf(Color(0xFFF79595), Color(0xFFFFE6E6)),
-                    borderColor = Color(0xFFD85050),
-                    selectedElevation = 12.dp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(48.dp))
-
-            Button(
-                onClick = {
-
-                },
-                enabled = selectedDifficulty.isNotEmpty(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = primaryColor,
-                    contentColor = Color.Black,
-                    disabledContainerColor = Color(0xFFF3E2A9),
-                    disabledContentColor = Color(0xFF999999)
-                )
-            ) {
-                Text(
-                    text = "Start Quiz",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    fontFamily = InterFontFamily
-                )
+                "completion" -> QuizCompletionScreen(
+                    onNextCourse = { currentScreen = "difficulty" })
             }
         }
     }
 }
 
 @Composable
-fun DifficultyCard(
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    baseColor: Color,
-    gradientColors: List<Color>,
-    borderColor: Color,
-    selectedElevation: Dp = 8.dp
+fun QuizDifficultyScreen(
+    selectedDifficulty: String,
+    completedDifficulties: List<String>,
+    onDifficultySelected: (String) -> Unit
 ) {
-    val backgroundBrush = if (isSelected) {
-        Brush.linearGradient(
-            colors = gradientColors,
-            start = Offset(0f, 0f),
-            end = Offset(300f, 300f),
-            tileMode = TileMode.Clamp
+    val difficulties = listOf("Easy", "Medium", "Difficult", "Pro")
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F8F8))
+    ) {
+        Text(
+            text = "Quiz",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = InterFontFamily,
+            modifier = Modifier.padding(16.dp)
         )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(baseColor, baseColor)
-        )
-    }
 
-    Box(
+        difficulties.forEach { difficulty ->
+            val isCompleted = completedDifficulties.contains(difficulty)
+            DifficultyRow(
+                label = difficulty,
+                isCompleted = isCompleted,
+                onClick = { onDifficultySelected(difficulty) })
+        }
+    }
+}
+
+@Composable
+fun DifficultyRow(
+    label: String, isCompleted: Boolean, onClick: () -> Unit
+) {
+    val bg = if (isCompleted) Color(0xFFBBFFA0) else Color(0xFFF8F8F8)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(brush = backgroundBrush)
-            .clickable { onClick() }
-            .then(
-                if (isSelected) Modifier.shadow(selectedElevation, RoundedCornerShape(16.dp))
-                else Modifier.border(
-                    1.dp, borderColor.copy(alpha = 0.4f), RoundedCornerShape(16.dp)
-                )
+            .background(bg)
+            .clickable { onClick() }) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = InterFontFamily,
+                modifier = Modifier.weight(1f)
             )
-            .padding(start = 24.dp), contentAlignment = Alignment.CenterStart) {
-        Text(
-            text = label,
-            fontSize = 18.sp,
-            fontFamily = InterFontFamily,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) borderColor else Color(0xFF333333)
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.Black
+            )
+        }
+        Divider(color = Color.LightGray, thickness = 1.dp)
+    }
+}
+
+@Composable
+fun QuizQuestionScreen(
+    difficulty: String, onComplete: () -> Unit
+) {
+    var currentQuestionIndex by remember { mutableStateOf(0) }
+    val totalQuestions = 10
+    var selectedAnswer by remember { mutableStateOf<String?>(null) }
+
+    val answers = listOf("Hello", "M", "A", "Good morning!")
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F8F8))
+            .padding(16.dp)
+    ) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = difficulty,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = InterFontFamily
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = "${currentQuestionIndex + 1}/$totalQuestions",
+                fontSize = 16.sp,
+                fontFamily = InterFontFamily,
+                color = Color.Black
+            )
+        }
+
+        Box(
+            modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                Text(
+                    text = "What sign is this?",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Normal,
+                    fontFamily = InterFontFamily,
+                    textAlign = TextAlign.Center,
+                    color = Color.Black
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(400.dp)
+                        .background(Color.Transparent, shape = RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = R.drawable.camera_preview,
+                        contentDescription = "Quiz Sign",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    answers.chunked(2).forEach { rowAnswers ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            rowAnswers.forEach { answer ->
+                                val isSelected = selectedAnswer == answer
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp)
+                                        .background(
+                                            if (isSelected) Color(0xFFBBFFA0) else Color(0xFFFDE58A),
+                                            shape = MaterialTheme.shapes.medium
+                                        )
+                                        .clickable {
+                                            selectedAnswer = answer
+                                        }, contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = answer,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontFamily = InterFontFamily
+                                    )
+                                }
+
+                                if (isSelected) {
+                                    LaunchedEffect(answer) {
+                                        delay(400)
+                                        selectedAnswer = null
+                                        if (currentQuestionIndex < totalQuestions - 1) {
+                                            currentQuestionIndex++
+                                        } else {
+                                            onComplete()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuizCompletionScreen(
+    onNextCourse: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F8F8))
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        AsyncImage(
+            model = R.drawable.check_circle,
+            contentDescription = null,
+            modifier = Modifier.size(34.dp)
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "You’re doing great!",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = InterFontFamily,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "You’ve successfully completed this step. Keep up the good work — your progress is impressive.",
+            fontSize = 14.sp,
+            fontFamily = InterFontFamily,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = onNextCourse,
+            modifier = Modifier
+                .width(150.dp)
+                .height(35.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFACC15)),
+            shape = RoundedCornerShape(50)
+        ) {
+            Text(
+                "Next Course",
+                color = Color.Black,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = InterFontFamily
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.Black,
+                modifier = Modifier.size(35.dp)
+            )
+        }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun QuizDifficultyScreenPreview() {
-    QuizDifficultyScreen()
+fun PreviewQuizApp() {
+    QuizApp()
 }
