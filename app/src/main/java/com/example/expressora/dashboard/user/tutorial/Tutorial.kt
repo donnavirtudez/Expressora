@@ -252,9 +252,9 @@ fun VideoTutorialCard(
                         contentDescription = "Play",
                         tint = Color.White,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(48.dp)
                             .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .padding(4.dp)
+                            .padding(12.dp)
                     )
                 }
             }

@@ -14,8 +14,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,10 +25,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,8 +40,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -67,12 +73,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -81,13 +89,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -113,6 +125,7 @@ import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 sealed class TempMedia {
     data class Image(val uri: Uri) : TempMedia()
@@ -324,9 +337,8 @@ fun CommunitySpaceScreen() {
         }
     }
 
-    fun removeTempMedia(item: TempMedia) {
-        tempMedia.remove(item)
-    }
+    var fabOffsetX by rememberSaveable { mutableStateOf(0f) }
+    var fabOffsetY by rememberSaveable { mutableStateOf(0f) }
 
     Scaffold(topBar = {
         Column {
@@ -385,9 +397,28 @@ fun CommunitySpaceScreen() {
             onClick = { showCreateDialog = true },
             containerColor = Color(0xFFFACC15),
             contentColor = Color.Black,
-            shape = CircleShape
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add Post", tint = Color.Black)
+            shape = CircleShape,
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        fabOffsetX.roundToInt(), fabOffsetY.roundToInt()
+                    )
+                }
+                .pointerInput(Unit) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        fabOffsetX += dragAmount.x
+                        fabOffsetY += dragAmount.y
+                    }
+                }) {
+            Icon(Icons.Default.Add, contentDescription = "Add Post")
+        }
+
+        LaunchedEffect(isRefreshing) {
+            if (!isRefreshing) {
+                fabOffsetX = 0f
+                fabOffsetY = 0f
+            }
         }
     }) { paddingValues ->
         SwipeRefresh(
@@ -460,14 +491,7 @@ fun CommunitySpaceScreen() {
                         },
                         onImageClick = { previewImageUri = it },
                         onVideoClick = { previewVideoUri = it },
-                        onNext = {
-                            scope.launch {
-                                val target = index + 1
-                                if (target < filteredPosts.size) listState.animateScrollToItem(
-                                    target
-                                )
-                            }
-                        },
+
                         onEditPost = {
                             editingPost = post
 
@@ -616,7 +640,6 @@ fun PostCard(
     onAddComment: (String) -> Unit,
     onImageClick: (Uri) -> Unit,
     onVideoClick: (Uri) -> Unit,
-    onNext: () -> Unit,
     onEditPost: (Post) -> Unit,
     onDeletePost: (Post) -> Unit,
     onEditComment: (Comment) -> Unit,
@@ -692,6 +715,7 @@ fun PostCard(
                     fontSize = 14.sp,
                     fontFamily = InterFontFamily,
                     color = subtitleColor,
+                    textAlign = TextAlign.Justify,
                     maxLines = if (expanded) Int.MAX_VALUE else 3,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -707,14 +731,7 @@ fun PostCard(
                     Text(
                         text = if (expanded) "Show less" else "See more",
                         modifier = Modifier.clickable { expanded = !expanded },
-                        fontSize = 13.sp,
-                        fontFamily = InterFontFamily,
-                        color = Color(0xFF666666)
-                    )
-                    Text(
-                        text = "Next",
-                        modifier = Modifier.clickable { onNext() },
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontFamily = InterFontFamily,
                         color = Color(0xFF666666)
                     )
@@ -831,8 +848,6 @@ fun PostCard(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onLikeToggle) {
                     Icon(
@@ -869,7 +884,6 @@ fun PostCard(
             }
 
             if (post.showComments) {
-                Spacer(Modifier.height(8.dp))
                 Column {
                     post.comments.forEach { comment ->
                         Row(
@@ -895,13 +909,14 @@ fun PostCard(
                                         comment.author + editedTag,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = InterFontFamily,
-                                        fontSize = 13.sp
+                                        fontSize = 14.sp
                                     )
                                     Text(
-                                        "${comment.message} · ${getTimeAgo(comment.timestamp)}",
-                                        fontSize = 13.sp,
+                                        "${comment.message} ${getTimeAgo(comment.timestamp)}",
+                                        fontSize = 14.sp,
                                         fontFamily = InterFontFamily,
-                                        color = subtitleColor
+                                        color = subtitleColor,
+                                        textAlign = TextAlign.Justify
                                     )
                                 }
                             }
@@ -943,17 +958,22 @@ fun PostCard(
                                 unfocusedBorderColor = Color(0xFF666666)
                             )
                         )
-                        IconButton(onClick = {
-                            if (newComment.isNotBlank()) {
+                        IconButton(
+                            onClick = {
                                 onAddComment(newComment)
                                 newComment = ""
-                            }
-                        }) {
+                            }, enabled = newComment.isNotBlank()
+                        ) {
                             Icon(
-                                Icons.Default.Send, contentDescription = "Reply", tint = Color.Black
+                                Icons.Default.Send,
+                                contentDescription = "Reply",
+                                tint = if (newComment.isNotBlank()) Color.Black else Color(
+                                    0xFFEEEEEE
+                                )
                             )
                         }
                     }
+
                 }
             }
         }
@@ -979,33 +999,77 @@ fun MediaItem(
 
 @Composable
 fun MediaContent(uri: Uri, isImage: Boolean) {
-    if (isImage) {
-        AsyncImage(
-            model = uri,
-            contentDescription = "Image",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-    } else {
-        val context = LocalContext.current
-        val thumbnail = remember(uri) { getVideoThumbnail(uri, context) }
-        if (thumbnail != null) {
-            Image(
-                bitmap = thumbnail.asImageBitmap(),
-                contentDescription = "Video",
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (isImage) {
+            AsyncImage(
+                model = uri,
+                contentDescription = "Image",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
+        } else {
+            val context = LocalContext.current
+            val thumbnail = remember(uri) { getVideoThumbnail(uri, context) }
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail.asImageBitmap(),
+                    contentDescription = "Video",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Play",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), shape = CircleShape)
+                    .padding(12.dp)
+            )
         }
-        Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = "Play",
-            tint = Color.White,
-            modifier = Modifier.size(48.dp)
-        )
     }
 }
 
+
+private val PREVIEW_ROW_HEIGHT = 180.dp
+private val PREVIEW_ITEM_SPACING = 8.dp
+private val PREVIEW_ITEM_HEIGHT = 180.dp
+
+@Composable
+private fun MediaVerticalScrollbar(
+    scrollState: ScrollState, previewHeight: Dp, modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+
+    Box(
+        modifier = modifier
+            .width(6.dp)
+            .fillMaxHeight(), contentAlignment = Alignment.TopCenter
+    ) {
+        val maxScroll = scrollState.maxValue
+        if (maxScroll > 0) {
+            val viewportPx = with(density) { previewHeight.toPx() }
+            val thumbHeightPx =
+                (viewportPx / (viewportPx + maxScroll)).coerceIn(0.08f, 1f) * viewportPx
+            val thumbHeightDp = with(density) { thumbHeightPx.toDp() }.coerceAtLeast(18.dp)
+            val availablePx = viewportPx - thumbHeightPx
+            val fraction = scrollState.value.toFloat() / maxScroll.toFloat()
+            val offsetPx = availablePx * fraction
+            val offsetDp = with(density) { offsetPx.toDp() }
+
+            Box(
+                modifier = Modifier
+                    .offset(y = offsetDp)
+                    .width(6.dp)
+                    .height(thumbHeightDp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.Black.copy(alpha = 0.3f))
+            )
+        }
+    }
+}
 
 @Composable
 fun CreatePostDialog(
@@ -1018,6 +1082,10 @@ fun CreatePostDialog(
     onPickVideo: () -> Unit,
     onRemoveMedia: (TempMedia) -> Unit
 ) {
+    val isPostEnabled by remember(newPostText, tempMedia) {
+        derivedStateOf { newPostText.isNotBlank() || tempMedia.isNotEmpty() }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
@@ -1055,42 +1123,117 @@ fun CreatePostDialog(
                 Spacer(Modifier.height(12.dp))
 
                 if (tempMedia.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(tempMedia.size) { index ->
-                            val media = tempMedia[index]
-                            Box(
-                                modifier = Modifier
-                                    .width(180.dp)
-                                    .height(180.dp)
-                                    .clip(RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                when (media) {
-                                    is TempMedia.Image -> AsyncImage(
-                                        model = media.uri,
-                                        contentDescription = "Image Preview",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
+                    val scrollState = rememberScrollState()
+                    val isScrollable = tempMedia.size > 2
+                    val paddingEnd = if (isScrollable) 12.dp else 0.dp
 
-                                    is TempMedia.Video -> VideoPreviewThumbnail(uri = media.uri)
-                                }
-
-                                IconButton(
-                                    onClick = { onRemoveMedia(media) },
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(PREVIEW_ROW_HEIGHT)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(state = scrollState, enabled = isScrollable)
+                                .padding(end = paddingEnd),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            tempMedia.chunked(2).forEachIndexed { index, rowItems ->
+                                Row(
                                     modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .size(24.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                        .fillMaxWidth()
+                                        .height(PREVIEW_ITEM_HEIGHT),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Remove",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    if (rowItems.size == 1 && index == tempMedia.chunked(2).lastIndex) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .fillMaxHeight()
+                                                .clip(RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val media = rowItems.first()
+                                            when (media) {
+                                                is TempMedia.Image -> AsyncImage(
+                                                    model = media.uri,
+                                                    contentDescription = "Image Preview",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+
+                                                is TempMedia.Video -> VideoPreviewThumbnail(uri = media.uri)
+                                            }
+                                            IconButton(
+                                                onClick = { onRemoveMedia(media) },
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .size(28.dp)
+                                                    .background(
+                                                        Color.Black.copy(alpha = 0.5f), CircleShape
+                                                    )
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Remove",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        rowItems.forEach { media ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight()
+                                                    .clip(RoundedCornerShape(12.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                when (media) {
+                                                    is TempMedia.Image -> AsyncImage(
+                                                        model = media.uri,
+                                                        contentDescription = "Image Preview",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+
+                                                    is TempMedia.Video -> VideoPreviewThumbnail(uri = media.uri)
+                                                }
+
+                                                IconButton(
+                                                    onClick = { onRemoveMedia(media) },
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .size(28.dp)
+                                                        .background(
+                                                            Color.Black.copy(alpha = 0.5f),
+                                                            CircleShape
+                                                        )
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = "Remove",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                        }
+
+                        if (isScrollable) {
+                            MediaVerticalScrollbar(
+                                scrollState = scrollState,
+                                previewHeight = PREVIEW_ROW_HEIGHT,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = 2.dp)
+                            )
                         }
                     }
 
@@ -1128,11 +1271,18 @@ fun CreatePostDialog(
                         ) {
                             Text("Cancel", color = Color(0xFF666666))
                         }
+                        Spacer(Modifier.width(8.dp))
                         Button(
-                            onClick = onPost, colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFACC15), contentColor = Color.Black
+                            onClick = onPost,
+                            enabled = isPostEnabled,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isPostEnabled) Color(0xFFFACC15) else Color(
+                                    0xFFEEEEEE
+                                ), contentColor = Color.Black
                             )
-                        ) { Text("Post") }
+                        ) {
+                            Text("Post")
+                        }
                     }
                 }
             }
@@ -1154,15 +1304,37 @@ fun EditPostDialog(
     val updatedMedia = remember { mutableStateListOf<TempMedia>().apply { addAll(initialMedia) } }
 
     val imagePicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            uri?.let { updatedMedia.add(TempMedia.Image(it)) }
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { selectedUri: Uri? ->
+            selectedUri?.let {
+                updatedMedia.add(TempMedia.Image(it))
+                onPickImage(it)
+            }
         }
     val videoPicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            uri?.let { updatedMedia.add(TempMedia.Video(it)) }
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { selectedUri: Uri? ->
+            selectedUri?.let {
+                updatedMedia.add(TempMedia.Video(it))
+                onPickVideo(it)
+            }
         }
 
-    val isSaveEnabled = updatedText.isNotBlank() || updatedMedia.isNotEmpty()
+    val isSaveEnabled by remember(updatedText, updatedMedia) {
+        derivedStateOf {
+            val textChanged = updatedText != initialPost.content
+            val mediaChanged = updatedMedia.map {
+                when (it) {
+                    is TempMedia.Image -> it.uri
+                    is TempMedia.Video -> it.uri
+                }
+            } != initialMedia.map {
+                when (it) {
+                    is TempMedia.Image -> it.uri
+                    is TempMedia.Video -> it.uri
+                }
+            }
+            (updatedText.isNotBlank() || updatedMedia.isNotEmpty()) && (textChanged || mediaChanged)
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1201,42 +1373,123 @@ fun EditPostDialog(
                 Spacer(Modifier.height(12.dp))
 
                 if (updatedMedia.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(updatedMedia.size) { index ->
-                            val media = updatedMedia[index]
-                            Box(
-                                modifier = Modifier
-                                    .width(180.dp)
-                                    .height(180.dp)
-                                    .clip(RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                when (media) {
-                                    is TempMedia.Image -> AsyncImage(
-                                        model = media.uri,
-                                        contentDescription = "Image",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
+                    val scrollState = rememberScrollState()
+                    val isScrollable = updatedMedia.size > 2
+                    val paddingEnd = if (isScrollable) 12.dp else 0.dp
 
-                                    is TempMedia.Video -> VideoPreviewThumbnail(uri = media.uri)
-                                }
-
-                                IconButton(
-                                    onClick = { updatedMedia.remove(media) },
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(PREVIEW_ROW_HEIGHT)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(state = scrollState, enabled = isScrollable)
+                                .padding(end = paddingEnd),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            updatedMedia.chunked(2).forEachIndexed { index, rowItems ->
+                                Row(
                                     modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .size(24.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                        .fillMaxWidth()
+                                        .height(PREVIEW_ITEM_HEIGHT),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Remove",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    if (rowItems.size == 1 && index == updatedMedia.chunked(2).lastIndex) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .fillMaxHeight()
+                                                .clip(RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val media = rowItems.first()
+                                            when (media) {
+                                                is TempMedia.Image -> AsyncImage(
+                                                    model = media.uri,
+                                                    contentDescription = "Image",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+
+                                                is TempMedia.Video -> VideoPreviewThumbnail(uri = media.uri)
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    updatedMedia.remove(media)
+                                                    onRemoveMedia(media)
+                                                },
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .size(28.dp)
+                                                    .background(
+                                                        Color.Black.copy(alpha = 0.5f), CircleShape
+                                                    )
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Remove",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        rowItems.forEach { media ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight()
+                                                    .clip(RoundedCornerShape(12.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                when (media) {
+                                                    is TempMedia.Image -> AsyncImage(
+                                                        model = media.uri,
+                                                        contentDescription = "Image",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+
+                                                    is TempMedia.Video -> VideoPreviewThumbnail(uri = media.uri)
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        updatedMedia.remove(media)
+                                                        onRemoveMedia(media)
+                                                    },
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .size(28.dp)
+                                                        .background(
+                                                            Color.Black.copy(alpha = 0.5f),
+                                                            CircleShape
+                                                        )
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = "Remove",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                        }
+
+                        if (isScrollable) {
+                            MediaVerticalScrollbar(
+                                scrollState = scrollState,
+                                previewHeight = PREVIEW_ROW_HEIGHT,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = 2.dp)
+                            )
                         }
                     }
 
@@ -1281,7 +1534,7 @@ fun EditPostDialog(
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (isSaveEnabled) Color(0xFFFACC15) else Color(
                                     0xFFEEEEEE
-                                ), contentColor = if (isSaveEnabled) Color.Black else Color.Gray
+                                ), contentColor = Color.Black
                             )
                         ) {
                             Text("Save")
@@ -1293,14 +1546,13 @@ fun EditPostDialog(
     }
 }
 
-
 @Composable
 fun EditCommentDialogStyled(
     initialMessage: String, onDismiss: () -> Unit, onSave: (String) -> Unit
 ) {
     var text by remember { mutableStateOf(initialMessage) }
 
-    val isSaveEnabled = text.isNotBlank()
+    val isSaveEnabled = text.isNotBlank() && text != initialMessage
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1365,7 +1617,6 @@ fun EditCommentDialogStyled(
         }
     }
 }
-
 
 @Composable
 fun ConfirmDeleteDialogStyled(
@@ -1493,6 +1744,8 @@ fun VideoPreviewThumbnail(uri: Uri) {
             modifier = Modifier
                 .size(48.dp)
                 .align(Alignment.Center)
+                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                .padding(12.dp)
         )
     }
 }

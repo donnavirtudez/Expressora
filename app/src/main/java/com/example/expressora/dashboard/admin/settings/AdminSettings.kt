@@ -250,8 +250,7 @@ fun AdminAccountInfoScreen(navController: NavHostController, label: String) {
             }, onNotificationClick = {
                 context.startActivity(
                     Intent(
-                        context,
-                        NotificationActivity::class.java
+                        context, NotificationActivity::class.java
                     )
                 )
             })
@@ -311,8 +310,7 @@ fun AdminUserProfileScreen(navController: NavHostController, label: String) {
             }, onNotificationClick = {
                 context.startActivity(
                     Intent(
-                        context,
-                        NotificationActivity::class.java
+                        context, NotificationActivity::class.java
                     )
                 )
             })
@@ -477,8 +475,7 @@ fun AdminChangeEmailScreen(navController: NavHostController, label: String) {
             }, onNotificationClick = {
                 context.startActivity(
                     Intent(
-                        context,
-                        NotificationActivity::class.java
+                        context, NotificationActivity::class.java
                     )
                 )
             })
@@ -520,7 +517,7 @@ fun AdminChangeEmailScreen(navController: NavHostController, label: String) {
                         focusedTextColor = Color.Black,
                         unfocusedTextColor = Color.Black,
                         focusedIndicatorColor = Color.Black,
-                        unfocusedIndicatorColor = Color.Gray,
+                        unfocusedIndicatorColor = Color.Black,
                         cursorColor = Color.Black,
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent
@@ -606,8 +603,7 @@ fun AdminChangePasswordScreen(navController: NavHostController, label: String) {
             }, onNotificationClick = {
                 context.startActivity(
                     Intent(
-                        context,
-                        NotificationActivity::class.java
+                        context, NotificationActivity::class.java
                     )
                 )
             })

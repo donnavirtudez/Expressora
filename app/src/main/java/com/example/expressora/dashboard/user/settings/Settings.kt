@@ -531,7 +531,7 @@ fun ChangeEmailScreen(navController: NavHostController, label: String) {
                         focusedTextColor = Color.Black,
                         unfocusedTextColor = Color.Black,
                         focusedIndicatorColor = Color.Black,
-                        unfocusedIndicatorColor = Color.Gray,
+                        unfocusedIndicatorColor = Color.Black,
                         cursorColor = Color.Black,
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent
