@@ -36,7 +36,13 @@
 
         <!--        User Side-->
         <activity
+            android:name=".dashboard.user.community_space.CommunitySpaceActivity"
+            android:exported="false" />
+        <activity
             android:name=".dashboard.user.learn.LearnActivity"
+            android:exported="false" />
+        <activity
+            android:name=".dashboard.user.notification.NotificationActivity"
             android:exported="false" />
         <activity
             android:name=".dashboard.user.quiz.QuizActivity"
@@ -45,22 +51,16 @@
             android:name=".dashboard.user.translation.TranslationActivity"
             android:exported="false" />
         <activity
-            android:name=".dashboard.user.notification.NotificationActivity"
-            android:exported="false" />
-        <activity
-            android:name=".dashboard.user.community_space.CommunitySpaceActivity"
+            android:name=".dashboard.user.settings.SettingsActivity"
             android:exported="false" />
         <activity
             android:name=".dashboard.user.tutorial.TutorialActivity"
-            android:exported="false" />
-        <activity
-            android:name=".dashboard.user.settings.SettingsActivity"
             android:exported="false" />
 
 
         <!--        FOR STARTING THE SPECIFIC FILE-->
         <activity
-            android:name=".dashboard.admin.settings.AdminSettingsActivity"
+            android:name=".dashboard.admin.communityspacemanagement.CommunitySpaceManagementActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -70,12 +70,15 @@
 
 
         <!--        Admin Side-->
+        <!--        <activity-->
+        <!--            android:name=".dashboard.admin.communityspacemanagement.CommunitySpaceManagementActivity"-->
+        <!--            android:exported="false" />-->
         <activity
             android:name=".dashboard.admin.notification.NotificationActivity"
             android:exported="false" />
-        <!--        <activity-->
-        <!--            android:name=".dashboard.admin.settings.AdminSettingsActivity"-->
-        <!--            android:exported="false" />-->
+        <activity
+            android:name=".dashboard.admin.settings.AdminSettingsActivity"
+            android:exported="false" />
         <activity
             android:name=".dashboard.admin.tutorialmonitoring.TutorialMonitoringActivity"
             android:exported="false" />

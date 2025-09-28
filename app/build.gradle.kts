@@ -41,6 +41,8 @@ android {
 }
 
 dependencies {
+    implementation("androidx.compose.material:material:1.7.2")
+    implementation("androidx.compose.material:material:<compose-version>")
     implementation("com.google.accompanist:accompanist-pager:0.30.1")
     implementation("com.google.accompanist:accompanist-pager-indicators:0.30.1")
     implementation("androidx.media3:media3-exoplayer:1.4.1")
@@ -91,6 +93,8 @@ dependencies {
     implementation(libs.androidx.compose.testing)
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.runtime.saveable)
+    implementation(libs.material3)
+    implementation(libs.androidx.compose.animation)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -344,7 +344,7 @@ fun CommunitySpaceScreen() {
         Column {
             TopNav(notificationCount = 2, onProfileClick = {
                 context.startActivity(Intent(context, SettingsActivity::class.java))
-            }, onTranslateClick = {}, onNotificationClick = {
+            }, onTranslateClick = { { /* already in community space */ } }, onNotificationClick = {
                 context.startActivity(Intent(context, NotificationActivity::class.java))
             })
 
@@ -821,7 +821,8 @@ fun PostCard(
                                                     "+$remainingMedia",
                                                     color = Color.White,
                                                     fontSize = 24.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = InterFontFamily
                                                 )
                                             }
                                         }
@@ -953,6 +954,7 @@ fun PostCard(
                             modifier = Modifier.weight(1f),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.Black,
+                                cursorColor = Color.Black,
                                 unfocusedTextColor = Color(0xFF666666),
                                 focusedBorderColor = Color.Black,
                                 unfocusedBorderColor = Color(0xFF666666)
@@ -1111,6 +1113,7 @@ fun CreatePostDialog(
                         .heightIn(min = 60.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.Black,
+                        cursorColor = Color.Black,
                         unfocusedTextColor = Color(0xFF666666),
                         focusedBorderColor = Color.Black,
                         unfocusedBorderColor = Color(0xFF666666)
@@ -1361,6 +1364,7 @@ fun EditPostDialog(
                         .heightIn(min = 60.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.Black,
+                        cursorColor = Color.Black,
                         unfocusedTextColor = Color(0xFF666666),
                         focusedBorderColor = Color.Black,
                         unfocusedBorderColor = Color(0xFF666666)
@@ -1578,6 +1582,7 @@ fun EditCommentDialogStyled(
                         .heightIn(min = 60.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.Black,
+                        cursorColor = Color.Black,
                         unfocusedTextColor = Color(0xFF666666),
                         focusedBorderColor = Color.Black,
                         unfocusedBorderColor = Color(0xFF666666)

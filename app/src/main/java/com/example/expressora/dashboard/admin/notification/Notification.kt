@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.example.expressora.R
 import com.example.expressora.components.bottom_nav.BottomNav
 import com.example.expressora.components.top_nav.TopNav
+import com.example.expressora.dashboard.admin.communityspacemanagement.CommunitySpaceManagementActivity
 import com.example.expressora.dashboard.admin.settings.AdminSettingsActivity
 import com.example.expressora.ui.theme.InterFontFamily
 import com.google.accompanist.swiperefresh.SwipeRefresh
@@ -152,7 +153,11 @@ fun NotificationScreen() {
                 )
             )
         }, onTranslateClick = {
-
+            context.startActivity(
+                Intent(
+                    context, CommunitySpaceManagementActivity::class.java
+                )
+            )
         }, onNotificationClick = {
             { /* already in admin notification */ }
         })

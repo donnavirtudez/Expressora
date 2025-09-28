@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.sp
 import com.example.expressora.R
 import com.example.expressora.components.bottom_nav.BottomNav
 import com.example.expressora.components.top_nav.TopNav
-import com.example.expressora.components.top_nav2.TopTabNav2
+import com.example.expressora.components.top_nav_2.TopTabNav_2
 import com.example.expressora.dashboard.admin.notification.NotificationActivity
 import com.example.expressora.dashboard.admin.settings.AdminSettingsActivity
 import com.example.expressora.ui.theme.InterFontFamily
@@ -147,7 +147,7 @@ fun TutorialScreen() {
                 context.startActivity(Intent(context, NotificationActivity::class.java))
             })
             var selectedTab by remember { mutableStateOf(1) }
-            TopTabNav2(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+            TopTabNav_2(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
         }
     }, bottomBar = {
         BottomNav(onLearnClick = {

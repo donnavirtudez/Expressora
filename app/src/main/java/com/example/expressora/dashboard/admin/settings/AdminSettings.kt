@@ -65,6 +65,7 @@ import coil.compose.AsyncImage
 import com.example.expressora.auth.LoginActivity
 import com.example.expressora.components.bottom_nav.BottomNav
 import com.example.expressora.components.top_nav.TopNav
+import com.example.expressora.dashboard.admin.communityspacemanagement.CommunitySpaceManagementActivity
 import com.example.expressora.dashboard.admin.notification.NotificationActivity
 import com.example.expressora.ui.theme.InterFontFamily
 
@@ -246,7 +247,11 @@ fun AdminAccountInfoScreen(navController: NavHostController, label: String) {
             TopNav(notificationCount = 2, onProfileClick = {
                 { /* already in admin settings */ }
             }, onTranslateClick = {
-
+                context.startActivity(
+                    Intent(
+                        context, CommunitySpaceManagementActivity::class.java
+                    )
+                )
             }, onNotificationClick = {
                 context.startActivity(
                     Intent(
