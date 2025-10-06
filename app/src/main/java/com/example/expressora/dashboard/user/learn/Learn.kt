@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -125,12 +126,21 @@ fun LearnApp() {
                         )
                     lesson?.let { (title, description) ->
                         LessonDetailScreen(
-                            lessonTitle = title, lessonDescription = description, onTryItOut = {
+                            lessonTitle = title,
+                            lessonDescription = description,
+                            mediaAttachments = listOf(
+                                R.drawable.sample_profile,
+                                R.drawable.sample_profile2,
+                                R.drawable.expressora_logo,
+                                R.drawable.camera_preview,
+                            ),
+                            onTryItOut = {
                                 if (!completedLessons.contains(title)) completedLessons.add(title)
                                 navController.navigate("detection")
                             })
                     }
                 }
+
 
                 composable("detection") {
                     currentScreen = "detection"
@@ -151,8 +161,6 @@ fun LearnApp() {
         }
     }
 }
-
-// ==================== Original Composables ====================
 
 @Composable
 fun LessonListScreen(
@@ -237,54 +245,117 @@ fun LessonRow(
 
 @Composable
 fun LessonDetailScreen(
-    lessonTitle: String, lessonDescription: String, onTryItOut: () -> Unit
+    lessonTitle: String,
+    lessonDescription: String,
+    mediaAttachments: List<Int>,
+    onTryItOut: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF8F8F8))
-            .padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 40.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
+    val scrollState = rememberScrollState()
+    var selectedImage by remember { mutableStateOf<Int?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(24.dp)
         ) {
             Text(
                 text = lessonTitle,
-                fontSize = 28.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = InterFontFamily
             )
             Spacer(modifier = Modifier.height(12.dp))
+
             Text(
                 text = lessonDescription,
                 fontSize = 16.sp,
                 fontFamily = InterFontFamily,
                 color = Color(0xFF666666),
-                fontWeight = FontWeight.Normal,
-                textAlign = TextAlign.Justify
+                textAlign = TextAlign.Justify,
+                lineHeight = 22.sp,
+                modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (mediaAttachments.isNotEmpty()) {
+                Text(
+                    text = "Attachments",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = InterFontFamily,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                val chunkedAttachments = mediaAttachments.chunked(2)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    chunkedAttachments.forEach { rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            rowItems.forEach { imageRes ->
+                                Card(
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(140.dp)
+                                        .clickable { selectedImage = imageRes }) {
+                                    AsyncImage(
+                                        model = imageRes,
+                                        contentDescription = "Lesson Media",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+
+                            if (rowItems.size == 1) Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+
+            Button(
+                onClick = onTryItOut,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .width(150.dp)
+                    .height(35.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFACC15),
+                    contentColor = Color.Black,
+                    disabledContainerColor = Color(0xFFFACC15),
+                    disabledContentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(
+                    text = "Try It Out",
+                    color = Color.Black,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = InterFontFamily
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Button(
-            onClick = onTryItOut,
-            modifier = Modifier
-                .width(150.dp)
-                .height(35.dp)
-                .align(Alignment.CenterHorizontally),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFACC15)),
-            shape = RoundedCornerShape(50)
-        ) {
-            Text(
-                text = "Try It Out",
-                color = Color.Black,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = InterFontFamily
-            )
+        selectedImage?.let { imageRes ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.8f))
+                    .clickable { selectedImage = null }, contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = imageRes,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth(0.8f)
+                        .fillMaxHeight(0.6f)
+                )
+            }
         }
     }
 }
@@ -442,7 +513,7 @@ fun LessonCompletionScreen(onNextCourse: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "You’ve successfully completed this step. Keep up the good work — your progress is impressive.",
+            text = "You’ve successfully completed this step.\nKeep up the good work — your progress is impressive.",
             fontSize = 14.sp,
             fontFamily = InterFontFamily,
             textAlign = TextAlign.Center
@@ -455,7 +526,12 @@ fun LessonCompletionScreen(onNextCourse: () -> Unit) {
             modifier = Modifier
                 .width(150.dp)
                 .height(35.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFACC15)),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFACC15),
+                contentColor = Color.Black,
+                disabledContainerColor = Color(0xFFFACC15),
+                disabledContentColor = Color.Black
+            ),
             shape = RoundedCornerShape(50)
         ) {
             Text(
@@ -464,7 +540,7 @@ fun LessonCompletionScreen(onNextCourse: () -> Unit) {
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = InterFontFamily
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Icon(
                 Icons.Default.KeyboardArrowRight,
                 contentDescription = null,

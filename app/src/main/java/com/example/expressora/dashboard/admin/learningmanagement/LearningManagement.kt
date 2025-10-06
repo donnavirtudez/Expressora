@@ -19,7 +19,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -45,7 +45,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -64,6 +64,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -299,45 +300,44 @@ fun LessonListScreen(
             .contains(q)
     }.sortedWith(compareBy { if (sortSelection == "Latest") -it.lastUpdated else it.lastUpdated })
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppBackground),
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .background(AppBackground)
+            .padding(24.dp)
     ) {
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "Lessons",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = InterFontFamily
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onAddLesson) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Lesson")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
+        Row(
+            verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
+        ) {
             Text(
-                "Add a lesson to cover new topics",
-                fontSize = 14.sp,
-                color = MutedText,
-                fontFamily = InterFontFamily,
-                modifier = Modifier.padding(start = 4.dp)
+                "Lessons",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = InterFontFamily
             )
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = onAddLesson) {
+                Icon(Icons.Default.Add, contentDescription = "Add Lesson")
+            }
+        }
 
-            Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
-            ) {
-                val searchModifier = Modifier
+        Text(
+            "Add a lesson to cover new topics",
+            fontSize = 14.sp,
+            color = MutedText,
+            fontFamily = InterFontFamily,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
+        ) {
+            val searchModifier =
+                Modifier
                     .weight(1f)
                     .height(48.dp)
                     .padding(end = 8.dp)
@@ -345,85 +345,97 @@ fun LessonListScreen(
                     .background(Color.White, RoundedCornerShape(50))
                     .shadow(2.dp, RoundedCornerShape(50))
 
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search lessons", color = Color(0xFF666666)) },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Search, contentDescription = "Search", tint = Color.Black
-                        )
-                    },
-                    modifier = searchModifier,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedTextColor = Color.Black,
-                        unfocusedTextColor = Color(0xFF666666),
-                        cursorColor = Color.Black,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search lessons", color = Color(0xFF666666)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search, contentDescription = "Search", tint = Color.Black
                     )
+                },
+                modifier = searchModifier,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color(0xFF666666),
+                    cursorColor = Color.Black,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White
                 )
+            )
 
-                var dropdownWidth by remember { mutableStateOf(0) }
-                Box(modifier = Modifier.onGloballyPositioned { coords ->
-                    dropdownWidth = coords.size.width
-                }) {
-                    Row(
-                        modifier = Modifier
-                            .height(48.dp)
-                            .widthIn(min = 100.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White)
-                            .clickable { sortExpanded = true }
-                            .padding(horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text(sortSelection, color = Color.Black)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            Icons.Default.ArrowDropDown,
-                            contentDescription = "Sort",
-                            tint = Color.Black
-                        )
-                    }
+            var dropdownWidth by remember { mutableStateOf(0) }
+            Box(modifier = Modifier.onGloballyPositioned { coords ->
+                dropdownWidth = coords.size.width
+            }) {
+                Row(
+                    modifier = Modifier
+                        .height(48.dp)
+                        .widthIn(min = 100.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White)
+                        .clickable { sortExpanded = true }
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(sortSelection, color = Color.Black)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        Icons.Default.ArrowDropDown, contentDescription = "Sort", tint = Color.Black
+                    )
+                }
 
-                    DropdownMenu(
-                        expanded = sortExpanded,
-                        onDismissRequest = { sortExpanded = false },
-                        modifier = Modifier
-                            .width(with(LocalDensity.current) { dropdownWidth.toDp() })
-                            .background(Color.White)
-                    ) {
-                        sortOptions.filter { it != sortSelection }.forEach { opt ->
-                            DropdownMenuItem(text = { Text(opt, color = Color.Black) }, onClick = {
-                                sortSelection = opt
-                                sortExpanded = false
-                            })
-                        }
+                DropdownMenu(
+                    expanded = sortExpanded,
+                    onDismissRequest = { sortExpanded = false },
+                    modifier = Modifier
+                        .width(with(LocalDensity.current) { dropdownWidth.toDp() })
+                        .background(Color.White)
+                ) {
+                    sortOptions.filter { it != sortSelection }.forEach { opt ->
+                        DropdownMenuItem(text = { Text(opt, color = Color.Black) }, onClick = {
+                            sortSelection = opt
+                            sortExpanded = false
+                        })
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                "${filtered.size} lesson(s)",
-                color = MutedText,
-                modifier = Modifier.padding(start = 4.dp)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        items(filtered, key = { it.id }) { lesson ->
-            LessonCard(
-                lesson = lesson,
-                onEdit = { onEditLesson(lesson.id) },
-                onDelete = { deleteDialog.value = true to lesson.id })
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "${filtered.size} lesson(s)",
+            color = MutedText,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        val listState = rememberLazyListState()
+
+        LaunchedEffect(sortSelection) {
+            listState.animateScrollToItem(0)
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            state = listState
+        ) {
+            items(filtered, key = { it.id }) { lesson ->
+                LessonCard(
+                    lesson = lesson,
+                    onEdit = { onEditLesson(lesson.id) },
+                    onDelete = { deleteDialog.value = true to lesson.id })
+            }
         }
     }
+
 
     if (deleteDialog.value.first) {
         ConfirmStyledDialog(
@@ -754,12 +766,14 @@ fun LessonEditorScreen(
                                     modifier = Modifier.fillMaxSize()
                                 )
                                 Icon(
-                                    Icons.Default.PlayCircleFilled,
+                                    Icons.Default.PlayArrow,
                                     contentDescription = "Play",
-                                    tint = Color.Black.copy(alpha = 0.8f),
+                                    tint = Color.White,
                                     modifier = Modifier
-                                        .size(36.dp)
+                                        .size(48.dp)
                                         .align(Alignment.Center)
+                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                        .padding(12.dp)
                                 )
                             }
 

@@ -201,7 +201,7 @@ fun NotificationScreen() {
             ) {
                 Text(
                     text = "Notifications",
-                    fontSize = 24.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = InterFontFamily,
                     color = textColor

@@ -106,23 +106,22 @@ fun QuizApp() {
 
                 composable("question") {
                     QuizQuestionScreen(
-                        difficulty = selectedDifficulty, onComplete = {
+                        difficulty = selectedDifficulty, onComplete = { score ->
                             if (selectedDifficulty.isNotEmpty() && !completedDifficulties.contains(
                                     selectedDifficulty
                                 )
                             ) {
                                 completedDifficulties.add(selectedDifficulty)
                             }
-                            navController.navigate("completion")
+                            navController.navigate("completion/$score")
                         })
                 }
 
-                composable("completion") {
+                composable("completion/{score}") { backStackEntry ->
+                    val score = backStackEntry.arguments?.getString("score")?.toIntOrNull() ?: 0
                     QuizCompletionScreen(
-                        onNextCourse = {
-                            navController.popBackStack(
-                                "difficulty", inclusive = false
-                            )
+                        score = score, onNextCourse = {
+                            navController.popBackStack("difficulty", inclusive = false)
                         })
                 }
             }
@@ -194,12 +193,14 @@ fun DifficultyRow(label: String, isCompleted: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun QuizQuestionScreen(
-    difficulty: String, onComplete: () -> Unit
+    difficulty: String, onComplete: (score: Int) -> Unit
 ) {
     var currentQuestionIndex by remember { mutableStateOf(0) }
     val totalQuestions = 10
+    var score by remember { mutableStateOf(0) }
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
     val answers = listOf("Hello", "M", "A", "Good morning!")
+    val correctAnswer = "Hello"
 
     Column(
         modifier = Modifier
@@ -274,8 +275,10 @@ fun QuizQuestionScreen(
                                             if (isSelected) Color(0xFFBBFFA0) else Color(0xFFFDE58A),
                                             shape = MaterialTheme.shapes.medium
                                         )
-                                        .clickable { selectedAnswer = answer },
-                                    contentAlignment = Alignment.Center
+                                        .clickable {
+                                            selectedAnswer = answer
+                                            if (answer == correctAnswer) score++
+                                        }, contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = answer,
@@ -292,7 +295,7 @@ fun QuizQuestionScreen(
                                         if (currentQuestionIndex < totalQuestions - 1) {
                                             currentQuestionIndex++
                                         } else {
-                                            onComplete()
+                                            onComplete(score)
                                         }
                                     }
                                 }
@@ -307,7 +310,7 @@ fun QuizQuestionScreen(
 
 @Composable
 fun QuizCompletionScreen(
-    onNextCourse: () -> Unit
+    score: Int, onNextCourse: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -317,6 +320,17 @@ fun QuizCompletionScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
+        Text(
+            text = "$score/10",
+            fontSize = 35.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = InterFontFamily,
+            color = Color(0xFFFFC107)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         AsyncImage(
             model = R.drawable.check_circle,
             contentDescription = null,
@@ -336,7 +350,7 @@ fun QuizCompletionScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "You’ve successfully completed this step. Keep up the good work — your progress is impressive.",
+            text = "You’ve successfully completed this step.\nKeep up the good work — your progress is impressive.",
             fontSize = 14.sp,
             fontFamily = InterFontFamily,
             textAlign = TextAlign.Center
@@ -349,16 +363,21 @@ fun QuizCompletionScreen(
             modifier = Modifier
                 .width(150.dp)
                 .height(35.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFACC15)),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFACC15),
+                contentColor = Color.Black,
+                disabledContainerColor = Color(0xFFFACC15),
+                disabledContentColor = Color.Black
+            ),
             shape = RoundedCornerShape(50)
         ) {
             Text(
-                "Next Course",
+                "Next Level",
                 color = Color.Black,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = InterFontFamily
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Icon(
                 Icons.Default.KeyboardArrowRight,
                 contentDescription = null,
