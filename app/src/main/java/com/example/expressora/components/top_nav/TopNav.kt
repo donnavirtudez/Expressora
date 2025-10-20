@@ -53,13 +53,14 @@ fun TopNav(
             colorFilter = ColorFilter.tint(Color.Black),
             modifier = Modifier
                 .size(30.dp)
+                .clip(CircleShape)
                 .clickable { onProfileClick() })
 
         Box(
             modifier = Modifier
+                .size(50.dp)
                 .clip(CircleShape)
                 .background(Color(0xFFF8F8F8))
-                .padding(8.dp)
                 .clickable { onTranslateClick() }, contentAlignment = Alignment.Center
         ) {
             Image(
@@ -88,6 +89,7 @@ fun TopNav(
                 colorFilter = ColorFilter.tint(Color.Black),
                 modifier = Modifier
                     .size(30.dp)
+                    .clip(CircleShape)
                     .clickable { onNotificationClick() })
         }
     }

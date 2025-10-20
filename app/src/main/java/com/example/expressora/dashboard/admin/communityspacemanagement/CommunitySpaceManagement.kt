@@ -44,6 +44,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.DismissDirection
 import androidx.compose.material.ExperimentalMaterialApi
@@ -80,6 +82,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -198,7 +201,16 @@ private fun nextCommentId(post: Post): Int = (post.comments.maxOfOrNull { it.id 
 class CommunitySpaceManagementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { CommunitySpaceManagementScreen() }
+        setContent {
+            val customSelectionColors = TextSelectionColors(
+                handleColor = Color(0xFFFACC15),
+                backgroundColor = Color(0x33FACC15)
+            )
+
+            CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
+                CommunitySpaceManagementScreen()
+            }
+        }
     }
 }
 
@@ -792,10 +804,12 @@ fun ReportPostDialog(
                                 imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
                                 tint = Color.Black,
-                                modifier = Modifier.clickable {
-                                    if (selectedReason.isEmpty() || reasons.size > 1) expanded =
-                                        !expanded
-                                })
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        if (selectedReason.isEmpty() || reasons.size > 1) expanded =
+                                            !expanded
+                                    })
                         },
                         modifier = Modifier
                             .fillMaxWidth()

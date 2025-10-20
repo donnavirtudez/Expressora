@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -275,7 +276,9 @@ fun QuizQuestionScreen(
                                             if (isSelected) Color(0xFFBBFFA0) else Color(0xFFFDE58A),
                                             shape = MaterialTheme.shapes.medium
                                         )
-                                        .clickable {
+                                        .clickable(
+                                            indication = null,
+                                            interactionSource = remember { MutableInteractionSource() }) {
                                             selectedAnswer = answer
                                             if (answer == correctAnswer) score++
                                         }, contentAlignment = Alignment.Center

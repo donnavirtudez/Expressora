@@ -1,4 +1,4 @@
-package com.example.expressora.home
+package com.example.expressora.splash_screen
 
 import android.content.Intent
 import android.os.Bundle
@@ -7,8 +7,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -17,17 +25,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.tooling.preview.Preview
 import com.example.expressora.R
 import com.example.expressora.auth.LoginActivity
 import com.example.expressora.ui.theme.ExpressoraTheme
-import kotlinx.coroutines.delay
 import com.example.expressora.ui.theme.InterFontFamily
+import kotlinx.coroutines.delay
 
 
-class MainActivity : ComponentActivity() {
+class SplashScreenActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -92,7 +100,7 @@ fun LogoWithLoadingIndicator(modifier: Modifier = Modifier) {
 
 @Preview(showBackground = true)
 @Composable
-fun MainScreenPreview() {
+fun SplashScreenPreview() {
     ExpressoraTheme {
         LogoWithLoadingIndicator()
     }

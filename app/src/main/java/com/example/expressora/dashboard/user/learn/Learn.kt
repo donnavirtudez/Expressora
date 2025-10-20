@@ -9,6 +9,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -300,7 +301,11 @@ fun LessonDetailScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(140.dp)
-                                        .clickable { selectedImage = imageRes }) {
+                                        .clickable(
+                                            indication = null,
+                                            interactionSource = remember { MutableInteractionSource() }) {
+                                            selectedImage = imageRes
+                                        }) {
                                     AsyncImage(
                                         model = imageRes,
                                         contentDescription = "Lesson Media",

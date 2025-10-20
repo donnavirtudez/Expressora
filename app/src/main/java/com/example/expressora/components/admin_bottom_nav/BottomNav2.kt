@@ -14,11 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -40,13 +41,13 @@ fun BottomNav2(
     onAnalyticsClick: () -> Unit,
     onQuizClick: () -> Unit
 ) {
+    val navItemSize = 70.dp
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(80.dp)
-            .background(
-                Color(0xFFFDE58A), shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp)
-            )
+            .background(Color(0xFFFDE58A))
     ) {
         Row(
             modifier = Modifier
@@ -58,7 +59,11 @@ fun BottomNav2(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onLearnClick() }) {
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .size(navItemSize)
+                    .clip(CircleShape)
+                    .clickable { onLearnClick() }) {
                 Image(
                     painter = painterResource(id = R.drawable.book_open),
                     contentDescription = "Learn",
@@ -68,16 +73,20 @@ fun BottomNav2(
                 Text(
                     text = "Learn",
                     fontSize = 14.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = InterFontFamily,
-                    fontWeight = FontWeight.Bold
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
                 )
             }
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onAnalyticsClick() }) {
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .size(navItemSize)
+                    .clip(CircleShape)
+                    .clickable { onAnalyticsClick() }) {
                 Image(
                     painter = painterResource(id = R.drawable.analytics),
                     contentDescription = "Analytics",
@@ -87,16 +96,20 @@ fun BottomNav2(
                 Text(
                     text = "Analytics",
                     fontSize = 14.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = InterFontFamily,
-                    fontWeight = FontWeight.Bold
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
                 )
             }
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onQuizClick() }) {
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .size(navItemSize)
+                    .clip(CircleShape)
+                    .clickable { onQuizClick() }) {
                 Image(
                     painter = painterResource(id = R.drawable.star),
                     contentDescription = "Quiz",
@@ -106,10 +119,10 @@ fun BottomNav2(
                 Text(
                     text = "Quiz",
                     fontSize = 14.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = InterFontFamily,
-                    fontWeight = FontWeight.Bold
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
                 )
             }
         }

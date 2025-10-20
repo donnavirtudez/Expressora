@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Text
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -39,14 +41,11 @@ import com.example.expressora.ui.theme.InterFontFamily
 
 @Composable
 fun TopTabNav2(
-    selectedTab: Int,
-    onTabSelected: (Int) -> Unit
+    selectedTab: Int, onTabSelected: (Int) -> Unit
 ) {
     val tabs = listOf("Community", "ASL/FSL Video")
     val textStyle = TextStyle(
-        fontSize = 16.sp,
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Bold
+        fontSize = 16.sp, fontFamily = InterFontFamily, fontWeight = FontWeight.Bold
     )
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -69,37 +68,35 @@ fun TopTabNav2(
                 val underlineWidth = with(density) { measuredText.size.width.toDp() }
 
                 Column(
-                    modifier = Modifier
-                        .clickable {
-                            onTabSelected(index)
-
-                            when (index) {
-                                0 -> context.startActivity(
-                                    Intent(
-                                        context,
-                                        CommunitySpaceActivity::class.java
-                                    )
-                                )
-
-                                1 -> context.startActivity(
-                                    Intent(
-                                        context,
-                                        TutorialActivity::class.java
-                                    )
-                                )
-                            }
-                        }
-                        .padding(horizontal = 8.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color.Black,
-                        fontFamily = InterFontFamily
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable {
+                                onTabSelected(index)
+                                when (index) {
+                                    0 -> context.startActivity(
+                                        Intent(context, CommunitySpaceActivity::class.java)
+                                    )
+
+                                    1 -> context.startActivity(
+                                        Intent(context, TutorialActivity::class.java)
+                                    )
+                                }
+                            }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)) {
+                        Text(
+                            text = title,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = Color.Black,
+                            fontFamily = InterFontFamily
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
                     if (selectedTab == index) {
                         Box(
@@ -123,7 +120,5 @@ fun TopTabNav2(
 fun PreviewTopTabNav2() {
     var selectedTab by remember { mutableStateOf(0) }
     TopTabNav2(
-        selectedTab = selectedTab,
-        onTabSelected = { selectedTab = it }
-    )
+        selectedTab = selectedTab, onTabSelected = { selectedTab = it })
 }

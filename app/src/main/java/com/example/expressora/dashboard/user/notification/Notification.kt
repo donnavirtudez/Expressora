@@ -201,21 +201,28 @@ fun NotificationScreen() {
                     color = textColor
                 )
                 if (notifications.isNotEmpty()) {
-                    Text(
-                        text = "Clear All",
-                        fontSize = 14.sp,
-                        color = subtitleColor,
-                        modifier = Modifier.clickable {
-                            scope.launch {
-                                notifications.forEach {
-                                    visibilityStates[it.id]?.targetState = false
-                                    delay(100)
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable {
+                                scope.launch {
+                                    notifications.forEach {
+                                        visibilityStates[it.id]?.targetState = false
+                                        delay(100)
+                                    }
+                                    delay(400)
+                                    notifications.clear()
+                                    visibilityStates.clear()
                                 }
-                                delay(400)
-                                notifications.clear()
-                                visibilityStates.clear()
                             }
-                        })
+                            .padding(horizontal = 4.dp, vertical = 2.dp)) {
+                        Text(
+                            text = "Clear All",
+                            fontSize = 14.sp,
+                            color = subtitleColor,
+                            fontFamily = InterFontFamily
+                        )
+                    }
                 }
             }
 

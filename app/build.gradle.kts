@@ -41,6 +41,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("androidx.compose.material:material:1.7.2")
     implementation("androidx.compose.material:material:<compose-version>")
     implementation("com.google.accompanist:accompanist-pager:0.30.1")

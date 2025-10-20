@@ -46,6 +46,8 @@ fun BottomNav(
     onCameraClick: () -> Unit,
     onQuizClick: () -> Unit
 ) {
+    val navItemSize = 70.dp
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -66,7 +68,11 @@ fun BottomNav(
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onLearnClick() }) {
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .size(navItemSize)
+                    .clip(CircleShape)
+                    .clickable { onLearnClick() }) {
                 Image(
                     painter = painterResource(id = R.drawable.book_open),
                     contentDescription = "Learn",
@@ -76,19 +82,22 @@ fun BottomNav(
                 Text(
                     text = "Learn",
                     fontSize = 14.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = InterFontFamily,
-                    fontWeight = FontWeight.Bold
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
                 )
             }
-
 
             Spacer(modifier = Modifier.width(72.dp))
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onQuizClick() }) {
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .size(navItemSize)
+                    .clip(CircleShape)
+                    .clickable { onQuizClick() }) {
                 Image(
                     painter = painterResource(id = R.drawable.star),
                     contentDescription = "Quiz",
@@ -98,14 +107,13 @@ fun BottomNav(
                 Text(
                     text = "Quiz",
                     fontSize = 14.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Center,
-                    fontFamily = InterFontFamily,
                     fontWeight = FontWeight.Bold,
+                    fontFamily = InterFontFamily,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center
                 )
             }
         }
-
 
         Box(
             modifier = Modifier
@@ -128,7 +136,6 @@ fun BottomNav(
                             )
                         )
                     )
-
                     .clickable { onCameraClick() }, contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -148,16 +155,12 @@ fun BottomNavBarPreview() {
     val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
-        BottomNav(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            onLearnClick = {
-                context.startActivity(Intent(context, LearnActivity::class.java))
-            },
-            onCameraClick = {
-                context.startActivity(Intent(context, TranslationActivity::class.java))
-            },
-            onQuizClick = {
-                context.startActivity(Intent(context, QuizActivity::class.java))
-            })
+        BottomNav(modifier = Modifier.align(Alignment.BottomCenter), onLearnClick = {
+            context.startActivity(Intent(context, LearnActivity::class.java))
+        }, onCameraClick = {
+            context.startActivity(Intent(context, TranslationActivity::class.java))
+        }, onQuizClick = {
+            context.startActivity(Intent(context, QuizActivity::class.java))
+        })
     }
 }

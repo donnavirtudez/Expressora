@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -28,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,177 +77,197 @@ fun LoginScreen() {
         colors = listOf(Color(0xFFFACC15), Color(0xFFF8F8F8)), startY = 0f, endY = 1000f
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(brush = gradient),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth()
+    val customSelectionColors = TextSelectionColors(
+        handleColor = Color(0xFFFACC15), backgroundColor = Color(0x33FACC15)
+    )
+
+    CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(brush = gradient),
+            contentAlignment = Alignment.Center
         ) {
-
-            Text(
-                text = "WELCOME TO",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = textColor,
-                fontFamily = InterFontFamily,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Image(
-                painter = painterResource(id = R.drawable.expressora_logo),
-                contentDescription = "Expressora Logo",
-                modifier = Modifier.size(100.dp)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "EXPRESSORA",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = textColor,
-                fontFamily = InterFontFamily,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            var email by remember { mutableStateOf("") }
-            var password by remember { mutableStateOf("") }
-            var passwordVisible by remember { mutableStateOf(false) }
-
-
-            TextField(
-                value = email,
-                onValueChange = { email = it },
-                placeholder = {
-                    Text("Email", color = textColor, fontFamily = InterFontFamily)
-                },
-                modifier = Modifier.width(300.dp),
-                singleLine = true,
-                colors = TextFieldDefaults.colors(
-                    focusedTextColor = textColor,
-                    unfocusedTextColor = textColor,
-                    focusedIndicatorColor = textColor,
-                    unfocusedIndicatorColor = textColor,
-                    cursorColor = textColor,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-
-            TextField(
-                value = password,
-                onValueChange = { password = it },
-                placeholder = {
-                    Text("Password", color = textColor, fontFamily = InterFontFamily)
-                },
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                modifier = Modifier.width(300.dp),
-                singleLine = true,
-                trailingIcon = {
-                    val image =
-                        if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = image,
-                            contentDescription = "Toggle Password",
-                            tint = textColor
-                        )
-                    }
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedTextColor = textColor,
-                    unfocusedTextColor = textColor,
-                    focusedIndicatorColor = textColor,
-                    unfocusedIndicatorColor = textColor,
-                    cursorColor = textColor,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent
-                )
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-
-            Button(
-                onClick = {
-                    val intent = Intent(context, CommunitySpaceActivity::class.java)
-                    context.startActivity(intent)
-                },
-                modifier = Modifier
-                    .width(150.dp)
-                    .height(35.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFACC15), contentColor = textColor
-                )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
             ) {
+
                 Text(
-                    text = "Log In",
-                    fontWeight = FontWeight.SemiBold,
+                    text = "WELCOME TO",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
                     fontFamily = InterFontFamily,
-                    color = textColor
+                    textAlign = TextAlign.Center
                 )
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
+                Image(
+                    painter = painterResource(id = R.drawable.expressora_logo),
+                    contentDescription = "Expressora Logo",
+                    modifier = Modifier.size(100.dp)
+                )
 
-            val registerText = buildAnnotatedString {
-                append("Don’t have an account?\n")
-                withStyle(style = SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                    append("Register Now")
-                }
-            }
+                Spacer(modifier = Modifier.height(8.dp))
 
-            ClickableText(
-                text = registerText, style = TextStyle(
-                    fontSize = 14.sp,
+                Text(
+                    text = "EXPRESSORA",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
                     color = textColor,
-                    textAlign = TextAlign.Center,
-                    fontFamily = InterFontFamily
-                ), onClick = { offset ->
-                    val registerPart = "Register Now"
-                    val startIndex = registerText.indexOf(registerPart)
-                    val endIndex = startIndex + registerPart.length
-                    if (offset in startIndex until endIndex) {
-                        val intent = Intent(context, RegisterActivity::class.java)
+                    fontFamily = InterFontFamily,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                var email by remember { mutableStateOf("") }
+                var password by remember { mutableStateOf("") }
+                var passwordVisible by remember { mutableStateOf(false) }
+
+
+                TextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    placeholder = {
+                        Text(
+                            "Email",
+                            color = textColor,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
+                    },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily, fontSize = 16.sp, color = textColor
+                    ),
+                    modifier = Modifier.width(300.dp),
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor,
+                        focusedIndicatorColor = textColor,
+                        unfocusedIndicatorColor = textColor,
+                        cursorColor = textColor,
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    placeholder = {
+                        Text(
+                            "Password",
+                            color = textColor,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
+                    },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily, fontSize = 16.sp, color = textColor
+                    ),
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    modifier = Modifier.width(300.dp),
+                    singleLine = true,
+                    trailingIcon = {
+                        val image =
+                            if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = image,
+                                contentDescription = "Toggle Password",
+                                tint = textColor
+                            )
+                        }
+                    },
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor,
+                        focusedIndicatorColor = textColor,
+                        unfocusedIndicatorColor = textColor,
+                        cursorColor = textColor,
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = {
+                        val intent = Intent(context, CommunitySpaceActivity::class.java)
                         context.startActivity(intent)
-                    }
-                })
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-
-            val resetText = buildAnnotatedString {
-                withStyle(style = SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                    append("Forgot Password")
+                    },
+                    modifier = Modifier
+                        .width(150.dp)
+                        .height(35.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFACC15), contentColor = textColor
+                    )
+                ) {
+                    Text(
+                        text = "Log In",
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = InterFontFamily,
+                        color = textColor
+                    )
                 }
-            }
 
-            ClickableText(
-                text = resetText, style = TextStyle(
-                    fontSize = 14.sp,
-                    color = textColor,
-                    textAlign = TextAlign.Center,
-                    fontFamily = InterFontFamily
-                ), onClick = {
-                    val intent = Intent(context, ResetPasswordActivity::class.java)
-                    context.startActivity(intent)
-                })
+                Spacer(modifier = Modifier.height(24.dp))
+
+
+                val registerText = buildAnnotatedString {
+                    append("Don’t have an account?\n")
+                    withStyle(style = SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                        append("Register Now")
+                    }
+                }
+
+                ClickableText(
+                    text = registerText, style = TextStyle(
+                        fontSize = 14.sp,
+                        color = textColor,
+                        textAlign = TextAlign.Center,
+                        fontFamily = InterFontFamily
+                    ), onClick = { offset ->
+                        val registerPart = "Register Now"
+                        val startIndex = registerText.indexOf(registerPart)
+                        val endIndex = startIndex + registerPart.length
+                        if (offset in startIndex until endIndex) {
+                            val intent = Intent(context, RegisterActivity::class.java)
+                            context.startActivity(intent)
+                        }
+                    })
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+
+                val resetText = buildAnnotatedString {
+                    withStyle(style = SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                        append("Forgot Password")
+                    }
+                }
+
+                ClickableText(
+                    text = resetText, style = TextStyle(
+                        fontSize = 14.sp,
+                        color = textColor,
+                        textAlign = TextAlign.Center,
+                        fontFamily = InterFontFamily
+                    ), onClick = {
+                        val intent = Intent(context, ResetPasswordActivity::class.java)
+                        context.startActivity(intent)
+                    })
+            }
         }
     }
 }

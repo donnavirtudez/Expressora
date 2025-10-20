@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -40,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,12 +51,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,6 +69,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
+import com.example.expressora.R
 import com.example.expressora.auth.LoginActivity
 import com.example.expressora.components.admin_bottom_nav.BottomNav2
 import com.example.expressora.components.top_nav.TopNav
@@ -76,38 +84,47 @@ class AdminSettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val customSelectionColors = TextSelectionColors(
+                handleColor = Color(0xFFFACC15), backgroundColor = Color(0x33FACC15)
+            )
+
             val navController = rememberNavController()
-            NavHost(navController = navController, startDestination = "settings") {
-                composable("settings") { AdminSettingsScreen(navController) }
 
-                composable(
-                    route = "profile/{label}", arguments = listOf(navArgument("label") {
-                        defaultValue = "Personal Information"
-                    })
-                ) { backStackEntry ->
-                    val label =
-                        backStackEntry.arguments?.getString("label") ?: "Personal Information"
-                    if (label == "Account Information") {
-                        AdminAccountInfoScreen(navController, label)
-                    } else {
-                        AdminUserProfileScreen(label)
+            CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
+                NavHost(navController = navController, startDestination = "settings") {
+                    composable("settings") { AdminSettingsScreen(navController) }
+
+                    composable(
+                        route = "profile/{label}", arguments = listOf(navArgument("label") {
+                            defaultValue = "Personal Information"
+                        })
+                    ) { backStackEntry ->
+                        val label =
+                            backStackEntry.arguments?.getString("label") ?: "Personal Information"
+                        if (label == "Account Information") {
+                            AdminAccountInfoScreen(navController, label)
+                        } else {
+                            AdminUserProfileScreen(label)
+                        }
                     }
-                }
 
-                composable(
-                    route = "change_email/{label}",
-                    arguments = listOf(navArgument("label") { defaultValue = "Change Email" })
-                ) { backStackEntry ->
-                    val label = backStackEntry.arguments?.getString("label") ?: "Change Email"
-                    AdminChangeEmailScreen(label)
-                }
+                    composable(
+                        route = "change_email/{label}",
+                        arguments = listOf(navArgument("label") { defaultValue = "Change Email" })
+                    ) { backStackEntry ->
+                        val label = backStackEntry.arguments?.getString("label") ?: "Change Email"
+                        AdminChangeEmailScreen(label)
+                    }
 
-                composable(
-                    route = "change_password/{label}",
-                    arguments = listOf(navArgument("label") { defaultValue = "Change Password" })
-                ) { backStackEntry ->
-                    val label = backStackEntry.arguments?.getString("label") ?: "Change Password"
-                    AdminChangePasswordScreen(label)
+                    composable(
+                        route = "change_password/{label}", arguments = listOf(navArgument("label") {
+                            defaultValue = "Change Password"
+                        })
+                    ) { backStackEntry ->
+                        val label =
+                            backStackEntry.arguments?.getString("label") ?: "Change Password"
+                        AdminChangePasswordScreen(label)
+                    }
                 }
             }
         }
@@ -339,40 +356,24 @@ fun AdminUserProfileScreen(label: String) {
 
     Scaffold(
         topBar = {
-            TopNav(notificationCount = 2, onProfileClick = {
-                { /* already in admin settings */ }
-            }, onTranslateClick = {
-                context.startActivity(
-                    Intent(
-                        context, CommunitySpaceManagementActivity::class.java
+            TopNav(
+                notificationCount = 2,
+                onProfileClick = { /* already in admin settings */ },
+                onTranslateClick = {
+                    context.startActivity(
+                        Intent(context, CommunitySpaceManagementActivity::class.java)
                     )
-                )
-            }, onNotificationClick = {
-                context.startActivity(
-                    Intent(
-                        context, NotificationActivity::class.java
-                    )
-                )
-            })
+                },
+                onNotificationClick = {
+                    context.startActivity(Intent(context, NotificationActivity::class.java))
+                })
         }, bottomBar = {
             BottomNav2(onLearnClick = {
-                context.startActivity(
-                    Intent(
-                        context, LearningManagementActivity::class.java
-                    )
-                )
+                context.startActivity(Intent(context, LearningManagementActivity::class.java))
             }, onAnalyticsClick = {
-                context.startActivity(
-                    Intent(
-                        context, AnalyticsDashboardActivity::class.java
-                    )
-                )
+                context.startActivity(Intent(context, AnalyticsDashboardActivity::class.java))
             }, onQuizClick = {
-                context.startActivity(
-                    Intent(
-                        context, QuizManagementActivity::class.java
-                    )
-                )
+                context.startActivity(Intent(context, QuizManagementActivity::class.java))
             })
         }, containerColor = Color(0xFFF8F8F8)
     ) { paddingValues ->
@@ -407,14 +408,24 @@ fun AdminUserProfileScreen(label: String) {
                             .border(2.dp, Color.Black, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        AsyncImage(
-                            model = imageUri ?: "https://via.placeholder.com/100",
-                            contentDescription = "Profile Image",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                        )
+                        when {
+                            imageUri != null -> {
+                                AsyncImage(
+                                    model = imageUri,
+                                    contentDescription = "Profile Image",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                )
+                            }
+
+                            else -> {
+                                AestheticProfilePlaceholder(
+                                    firstName = firstName, drawableRes = R.drawable.profile
+                                )
+                            }
+                        }
                     }
 
                     Box(
@@ -436,6 +447,7 @@ fun AdminUserProfileScreen(label: String) {
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+
                 Text(
                     text = "${firstName.ifEmpty { "Your" }} ${lastName.ifEmpty { "Name" }}",
                     fontSize = 20.sp,
@@ -490,7 +502,9 @@ fun AdminUserProfileScreen(label: String) {
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
-                    onClick = { /* Save logic */ },
+                    onClick = {
+                        {/* Save logic */ }
+                    },
                     modifier = Modifier
                         .width(150.dp)
                         .height(35.dp),
@@ -506,6 +520,43 @@ fun AdminUserProfileScreen(label: String) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AestheticProfilePlaceholder(firstName: String, drawableRes: Int) {
+    val initial = firstName.firstOrNull()?.uppercaseChar()?.toString() ?: ""
+
+    if (firstName.isEmpty()) {
+        Image(
+            painter = painterResource(id = drawableRes),
+            contentDescription = "Default Profile",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.linearGradient(
+                        colorStops = arrayOf(
+                            0.0f to Color(0xFFF5F5F5), 1.0f to Color(0xFFBEBEBE)
+                        )
+                    ), shape = CircleShape
+                ), contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initial,
+                fontSize = 42.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                textAlign = TextAlign.Center,
+                fontFamily = InterFontFamily
+            )
         }
     }
 }
