@@ -13,3 +13,75 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# ==================================================
+# ✅ ANDROID / KOTLIN
+# ==================================================
+
+# Gradle files
+.gradle/
+build/
+
+# Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Local configuration
+local.properties
+
+# Generated files
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.log
+
+# Captures / screenshots
+captures/
+
+# Keystore files (private)
+*.jks
+*.keystore
+*.key
+
+# Google services / Firebase
+google-services.json
+
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Build output (TypeScript / bundlers)
+dist/
+build/
+
+# Temporary or cache files
+*.tmp
+*.temp
+.cache/
+.vscode/
+
+# macOS / Windows junk files
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# JetBrains
+.idea/
+
+docker-compose.override.yml
+__pycache__/
