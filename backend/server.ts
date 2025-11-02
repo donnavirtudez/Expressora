@@ -17,12 +17,19 @@ app.use(bodyParser.json());
 
 if (!admin.apps.length) {
   console.log("🔥 Initializing Firebase Admin SDK...");
+
+  const keyPathEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (!keyPathEnv) {
+    console.error("❌ Missing GOOGLE_APPLICATION_CREDENTIALS in environment!");
+    process.exit(1);
+  }
+
+  const keyPath = path.resolve(keyPathEnv);
   admin.initializeApp({
-    credential: admin.credential.cert(
-      require(path.join(__dirname, "./serviceAccountKey.json"))
-    ),
+    credential: admin.credential.cert(require(keyPath)),
   });
 }
+
 const db = admin.firestore();
 console.log("✅ Firestore initialized successfully");
 
@@ -168,7 +175,7 @@ app.post("/reset-send-otp", async (req: Request, res: Response) => {
     console.log(`🔐 [RESET] OTP for ${email}: ${otp}`);
 
     await transporter.sendMail({
-        from: `"Expressora Support" <${process.env.EMAIL_USER}>`,
+        from: `"Expressora" <${process.env.EMAIL_USER}>`,
         to: email,
         subject: "Expressora | Password Reset Code",
         html: `

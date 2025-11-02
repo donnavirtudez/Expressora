@@ -207,7 +207,7 @@ class RegisterActivity : ComponentActivity() {
         otpEmail = email
         otpPassword = password
 
-        val LOCAL_HOST_IP = "192.168.1.9"
+        val LOCAL_HOST_IP = "192.168.1.23"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -240,7 +240,7 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun verifyOtp(enteredOtp: String) {
-        val LOCAL_HOST_IP = "192.168.1.9"
+        val LOCAL_HOST_IP = "192.168.1.23"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -343,7 +343,7 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun sendGoogleTokenToBackend(idToken: String, displayName: String, email: String) {
-        val LOCAL_HOST_IP = "192.168.1.9"
+        val LOCAL_HOST_IP = "192.168.1.23"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
