@@ -17,19 +17,12 @@ app.use(bodyParser.json());
 
 if (!admin.apps.length) {
   console.log("🔥 Initializing Firebase Admin SDK...");
-
-  const keyPathEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!keyPathEnv) {
-    console.error("❌ Missing GOOGLE_APPLICATION_CREDENTIALS in environment!");
-    process.exit(1);
-  }
-
-  const keyPath = path.resolve(keyPathEnv);
   admin.initializeApp({
-    credential: admin.credential.cert(require(keyPath)),
+    credential: admin.credential.cert(
+      require(path.join(__dirname, "./serviceAccountKey.json"))
+    ),
   });
 }
-
 const db = admin.firestore();
 console.log("✅ Firestore initialized successfully");
 
@@ -290,4 +283,3 @@ app.post("/google-auth", async (req: Request, res: Response) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Expressora Server running at http://localhost:${PORT}`);
 });
-

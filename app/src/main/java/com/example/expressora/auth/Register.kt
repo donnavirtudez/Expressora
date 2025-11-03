@@ -1,6 +1,5 @@
 package com.example.expressora.auth
 
-import java.security.MessageDigest
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -52,7 +51,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -77,6 +75,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -84,6 +83,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.security.MessageDigest
 import java.util.Date
 import java.util.concurrent.TimeUnit
 
@@ -207,7 +207,7 @@ class RegisterActivity : ComponentActivity() {
         otpEmail = email
         otpPassword = password
 
-        val LOCAL_HOST_IP = "192.168.1.23"
+        val LOCAL_HOST_IP = "192.168.1.15"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -240,7 +240,7 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun verifyOtp(enteredOtp: String) {
-        val LOCAL_HOST_IP = "192.168.1.23"
+        val LOCAL_HOST_IP = "192.168.1.15"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -343,7 +343,7 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun sendGoogleTokenToBackend(idToken: String, displayName: String, email: String) {
-        val LOCAL_HOST_IP = "192.168.1.23"
+        val LOCAL_HOST_IP = "192.168.1.15"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
