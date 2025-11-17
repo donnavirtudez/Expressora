@@ -20,16 +20,21 @@ class AuthRepository {
                 return Triple(false, null, "USER_NOT_FOUND")
             }
 
-            val doc = snapshot.documents[0]
-            val storedHash = doc.getString("password") ?: ""
-            val role = doc.getString("role") ?: "user"
             val inputHash = sha256(password)
 
-            if (storedHash == inputHash) {
-                Triple(true, role, null)
-            } else {
-                Triple(false, null, "INVALID_PASSWORD")
+            // Check all documents with this email to find matching password
+            // Since same email + different roles must have different passwords, 
+            // there should only be one match
+            for (doc in snapshot.documents) {
+                val storedHash = doc.getString("password") ?: ""
+                val role = doc.getString("role") ?: "user"
+
+                if (storedHash == inputHash) {
+                    return Triple(true, role, null)
+                }
             }
+
+            Triple(false, null, "INVALID_PASSWORD")
         } catch (e: Exception) {
             Triple(false, null, e.message)
         }
