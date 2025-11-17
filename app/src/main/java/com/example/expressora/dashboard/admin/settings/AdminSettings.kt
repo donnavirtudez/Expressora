@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -957,8 +958,18 @@ fun AdminUserProfileScreen(navController: NavHostController, label: String) {
                     value = firstName,
                     onValueChange = { firstName = it },
                     placeholder = {
-                        Text("Firstname", color = Color.Black, fontFamily = InterFontFamily)
+                        Text(
+                            "Firstname",
+                            color = Color.Black,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
                     },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = Color.Black
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
@@ -979,8 +990,18 @@ fun AdminUserProfileScreen(navController: NavHostController, label: String) {
                     value = lastName,
                     onValueChange = { lastName = it },
                     placeholder = {
-                        Text("Lastname", color = Color.Black, fontFamily = InterFontFamily)
+                        Text(
+                            "Lastname",
+                            color = Color.Black,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
                     },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = Color.Black
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
@@ -1293,7 +1314,19 @@ fun AdminChangeEmailScreen(navController: NavHostController, label: String) {
                 TextField(
                     value = newEmail,
                     onValueChange = { newEmail = it },
-                    placeholder = { Text("New email address", fontFamily = InterFontFamily) },
+                    placeholder = {
+                        Text(
+                            "New email address",
+                            color = Color.Black,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
+                    },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = Color.Black
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
@@ -1313,8 +1346,18 @@ fun AdminChangeEmailScreen(navController: NavHostController, label: String) {
                     value = password,
                     onValueChange = { password = it },
                     placeholder = {
-                        Text("Password", color = textColor, fontFamily = InterFontFamily)
+                        Text(
+                            "Password",
+                            color = textColor,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
                     },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = textColor
+                    ),
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
@@ -1597,7 +1640,19 @@ fun AdminChangePasswordScreen(navController: NavHostController, label: String) {
                 TextField(
                     value = currentPassword,
                     onValueChange = { currentPassword = it },
-                    placeholder = { Text("Current password", fontFamily = InterFontFamily) },
+                    placeholder = {
+                        Text(
+                            "Current password",
+                            color = textColor,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
+                    },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = textColor
+                    ),
                     visualTransformation = if (currentPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -1628,7 +1683,19 @@ fun AdminChangePasswordScreen(navController: NavHostController, label: String) {
                 TextField(
                     value = newPassword,
                     onValueChange = { newPassword = it },
-                    placeholder = { Text("New password", fontFamily = InterFontFamily) },
+                    placeholder = {
+                        Text(
+                            "New password",
+                            color = textColor,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
+                    },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = textColor
+                    ),
                     visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -1659,7 +1726,19 @@ fun AdminChangePasswordScreen(navController: NavHostController, label: String) {
                 TextField(
                     value = confirmPassword,
                     onValueChange = { confirmPassword = it },
-                    placeholder = { Text("Confirm password", fontFamily = InterFontFamily) },
+                    placeholder = {
+                        Text(
+                            "Confirm password",
+                            color = textColor,
+                            fontFamily = InterFontFamily,
+                            fontSize = 16.sp
+                        )
+                    },
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = textColor
+                    ),
                     visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),

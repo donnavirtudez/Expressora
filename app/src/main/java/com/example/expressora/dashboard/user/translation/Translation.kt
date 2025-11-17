@@ -99,6 +99,13 @@ class TranslationActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Load preferred translation language from SharedPreferences
+        val sharedPref = getSharedPreferences("user_session", Context.MODE_PRIVATE)
+        val preferredLang = sharedPref.getString("preferred_translation_language", "ENG") ?: "ENG"
+        // Map "ENG" → "English", "FIL" → "Filipino"
+        selectedLanguage = if (preferredLang == "FIL") "Filipino" else "English"
+        
         tts = TextToSpeech(this, this)
 
         recognitionEnabled = false
@@ -188,7 +195,8 @@ class TranslationActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            tts?.language = Locale.US
+            // Set TTS language based on selectedLanguage (from preference)
+            tts?.language = if (selectedLanguage == "English") Locale.US else Locale("fil", "PH")
             tts?.setPitch(1.0f)
             tts?.setSpeechRate(1.0f)
             ttsReady = true
