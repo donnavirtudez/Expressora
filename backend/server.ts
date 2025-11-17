@@ -248,7 +248,10 @@ app.post("/reset-password", async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "User not found" });
 
     const docId = userSnap.docs[0].id;
-    await db.collection("users").doc(docId).update({ password: newPassword });
+    await db.collection("users").doc(docId).update({ 
+      password: newPassword,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
     console.log(`🔑 Password reset for ${email}`);
     return res.json({ success: true, message: "Password reset successful" });

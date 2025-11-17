@@ -183,23 +183,73 @@ class RegisterActivity : ComponentActivity() {
             return
         }
 
-        firestore.collection("users").whereEqualTo("email", email.trim()).get()
-            .addOnSuccessListener { snapshot ->
-                if (!snapshot.isEmpty) {
-                    Toast.makeText(
-                        context,
-                        "Email already registered. Please log in instead.",
-                        Toast.LENGTH_LONG
-                    ).show()
+        val trimmedEmail = email.trim()
+
+        // Check Firebase Auth first
+        firebaseAuth.fetchSignInMethodsForEmail(trimmedEmail)
+            .addOnSuccessListener { signInMethods ->
+                if (signInMethods.signInMethods?.isNotEmpty() == true) {
+                    // Email exists in Firebase Auth
+                    // Check if it exists in Firestore
+                    firestore.collection("users").whereEqualTo("email", trimmedEmail).get()
+                        .addOnSuccessListener { snapshot ->
+                            if (!snapshot.isEmpty) {
+                                Toast.makeText(
+                                    context,
+                                    "Email already registered. Please log in instead.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                // Email exists in Auth but not in Firestore - orphaned account
+                                Toast.makeText(
+                                    context,
+                                    "Email is already in use. Please log in instead.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                 } else {
-                    sendOtp(email.trim(), password)
+                    // Email doesn't exist in Auth, check Firestore
+                    firestore.collection("users").whereEqualTo("email", trimmedEmail).get()
+                        .addOnSuccessListener { snapshot ->
+                            if (!snapshot.isEmpty) {
+                                Toast.makeText(
+                                    context,
+                                    "Email already registered. Please log in instead.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                // Email doesn't exist in both Auth and Firestore - safe to register
+                                sendOtp(trimmedEmail, password)
+                            }
+                        }.addOnFailureListener { e ->
+                            Toast.makeText(
+                                context,
+                                "Error checking existing account: ${e.localizedMessage}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                 }
             }.addOnFailureListener { e ->
-                Toast.makeText(
-                    context,
-                    "Error checking existing account: ${e.localizedMessage}",
-                    Toast.LENGTH_LONG
-                ).show()
+                // If fetchSignInMethodsForEmail fails, still check Firestore as fallback
+                firestore.collection("users").whereEqualTo("email", trimmedEmail).get()
+                    .addOnSuccessListener { snapshot ->
+                        if (!snapshot.isEmpty) {
+                            Toast.makeText(
+                                context,
+                                "Email already registered. Please log in instead.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            sendOtp(trimmedEmail, password)
+                        }
+                    }.addOnFailureListener { firestoreError ->
+                        Toast.makeText(
+                            context,
+                            "Error checking existing account: ${firestoreError.localizedMessage}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
             }
     }
 
@@ -207,7 +257,7 @@ class RegisterActivity : ComponentActivity() {
         otpEmail = email
         otpPassword = password
 
-        val LOCAL_HOST_IP = "192.168.1.15"
+        val LOCAL_HOST_IP = "192.168.1.6"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -240,7 +290,7 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun verifyOtp(enteredOtp: String) {
-        val LOCAL_HOST_IP = "192.168.1.15"
+        val LOCAL_HOST_IP = "192.168.1.6"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -289,6 +339,7 @@ class RegisterActivity : ComponentActivity() {
                         "lastName" to "",
                         "profile" to "",
                         "role" to "user",
+                        "userId" to uid,
                         "createdAt" to Date()
                     )
                     firestore.collection("users").document(uid).set(user).addOnSuccessListener {
@@ -310,9 +361,74 @@ class RegisterActivity : ComponentActivity() {
                     }
                 }
             }.addOnFailureListener { e ->
-                Toast.makeText(
-                    context, "Error creating user: ${e.localizedMessage}", Toast.LENGTH_LONG
-                ).show()
+                val errorMessage = e.message ?: "Unknown error"
+                if (errorMessage.contains("email address is already in use") ||
+                    errorMessage.contains("already exists")
+                ) {
+                    // Email exists in Firebase Auth - try to sign in and create Firestore doc
+                    firebaseAuth.signInWithEmailAndPassword(otpEmail, otpPassword)
+                        .addOnSuccessListener { authResult ->
+                            val uid = authResult.user?.uid
+                            if (uid != null) {
+                                // Check if Firestore document exists
+                                firestore.collection("users").document(uid).get()
+                                    .addOnSuccessListener { doc ->
+                                        if (!doc.exists()) {
+                                            // Create Firestore document if it doesn't exist
+                                            val hashedPassword =
+                                                MessageDigest.getInstance("SHA-256")
+                                                    .digest(otpPassword.toByteArray())
+                                                    .joinToString("") { "%02x".format(it) }
+
+                                            val user = hashMapOf(
+                                                "email" to otpEmail,
+                                                "password" to hashedPassword,
+                                                "firstName" to "",
+                                                "lastName" to "",
+                                                "profile" to "",
+                                                "role" to "user",
+                                                "userId" to uid,
+                                                "createdAt" to Date()
+                                            )
+                                            firestore.collection("users").document(uid).set(user)
+                                                .addOnSuccessListener {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Registration successful",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    firebaseAuth.signOut()
+                                                    startActivity(
+                                                        Intent(
+                                                            this,
+                                                            LoginActivity::class.java
+                                                        )
+                                                    )
+                                                    finish()
+                                                }
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "Email already registered. Please log in instead.",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                            firebaseAuth.signOut()
+                                        }
+                                    }
+                            }
+                        }
+                        .addOnFailureListener { signInError ->
+                            Toast.makeText(
+                                context,
+                                "Email is already in use. Please log in instead.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                } else {
+                    Toast.makeText(
+                        context, "Error creating user: $errorMessage", Toast.LENGTH_LONG
+                    ).show()
+                }
             }
     }
 
@@ -343,7 +459,7 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun sendGoogleTokenToBackend(idToken: String, displayName: String, email: String) {
-        val LOCAL_HOST_IP = "192.168.1.15"
+        val LOCAL_HOST_IP = "192.168.1.6"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -395,6 +511,7 @@ class RegisterActivity : ComponentActivity() {
                                     "lastName" to "",
                                     "profile" to "",
                                     "role" to "user",
+                                    "userId" to uid,
                                     "createdAt" to Date()
                                 )
                                 firestore.collection("users").document(uid).set(user)
@@ -730,39 +847,39 @@ fun OTPInput2(otpText: String, onOtpChange: (String) -> Unit) {
     ) {
         BasicTextField(
             value = otpText, onValueChange = { onOtpChange(it) }, decorationBox = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(5) { index ->
-                    val char = otpText.getOrNull(index)?.toString() ?: ""
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, Color.Gray, RoundedCornerShape(10.dp))
-                            .background(Color.White), contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = char, style = TextStyle(
-                                color = textColor,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center,
-                                fontFamily = InterFontFamily
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(5) { index ->
+                        val char = otpText.getOrNull(index)?.toString() ?: ""
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, Color.Gray, RoundedCornerShape(10.dp))
+                                .background(Color.White), contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = char, style = TextStyle(
+                                    color = textColor,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    fontFamily = InterFontFamily
+                                )
                             )
-                        )
+                        }
                     }
                 }
-            }
-        }, textStyle = TextStyle(
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
-            textAlign = TextAlign.Center
-        )
+            }, textStyle = TextStyle(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                textAlign = TextAlign.Center
+            )
         )
     }
 }

@@ -192,7 +192,7 @@ class ResetPasswordActivity : ComponentActivity() {
     }
 
     private fun sendOtp(email: String) {
-        val LOCAL_HOST_IP = "192.168.1.15"
+        val LOCAL_HOST_IP = "192.168.1.6"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -225,7 +225,7 @@ class ResetPasswordActivity : ComponentActivity() {
     }
 
     private fun verifyOtp(enteredOtp: String) {
-        val LOCAL_HOST_IP = "192.168.1.15"
+        val LOCAL_HOST_IP = "192.168.1.6"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -276,7 +276,7 @@ class ResetPasswordActivity : ComponentActivity() {
             return
         }
 
-        val LOCAL_HOST_IP = "192.168.1.15"
+        val LOCAL_HOST_IP = "192.168.1.6"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
