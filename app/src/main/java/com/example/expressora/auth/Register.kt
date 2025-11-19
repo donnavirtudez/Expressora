@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -101,6 +102,8 @@ class RegisterActivity : ComponentActivity() {
     private var currentStep by mutableStateOf(1)
     private var isOtpSent by mutableStateOf(false)
     private var isRegistrationComplete by mutableStateOf(false)
+    private var isLoadingSignUp by mutableStateOf(false)
+    private var isLoadingVerify by mutableStateOf(false)
 
     private val client: OkHttpClient = OkHttpClient.Builder().callTimeout(30, TimeUnit.SECONDS)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
@@ -153,7 +156,9 @@ class RegisterActivity : ComponentActivity() {
                     onVerifyOtp = { enteredOtp ->
                         verifyOtp(enteredOtp)
                     },
-                    currentStep = currentStep
+                    currentStep = currentStep,
+                    isLoadingSignUp = isLoadingSignUp,
+                    isLoadingVerify = isLoadingVerify
                 )
             }
         }
@@ -183,6 +188,7 @@ class RegisterActivity : ComponentActivity() {
             return
         }
 
+        isLoadingSignUp = true
         val trimmedEmail = email.trim()
 
         // Check Firebase Auth first
@@ -191,8 +197,9 @@ class RegisterActivity : ComponentActivity() {
                 if (signInMethods.signInMethods?.isNotEmpty() == true) {
                     // Email exists in Firebase Auth
                     // Check if it exists in Firestore
-                    firestore.collection("users").whereEqualTo("email", trimmedEmail).get()
+                        firestore.collection("users").whereEqualTo("email", trimmedEmail).get()
                         .addOnSuccessListener { snapshot ->
+                            isLoadingSignUp = false
                             if (!snapshot.isEmpty) {
                                 Toast.makeText(
                                     context,
@@ -207,12 +214,15 @@ class RegisterActivity : ComponentActivity() {
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
+                        }.addOnFailureListener {
+                            isLoadingSignUp = false
                         }
                 } else {
                     // Email doesn't exist in Auth, check Firestore
                     firestore.collection("users").whereEqualTo("email", trimmedEmail).get()
                         .addOnSuccessListener { snapshot ->
                             if (!snapshot.isEmpty) {
+                                isLoadingSignUp = false
                                 Toast.makeText(
                                     context,
                                     "Email already registered. Please log in instead.",
@@ -223,6 +233,7 @@ class RegisterActivity : ComponentActivity() {
                                 sendOtp(trimmedEmail, password)
                             }
                         }.addOnFailureListener { e ->
+                            isLoadingSignUp = false
                             Toast.makeText(
                                 context,
                                 "Error checking existing account: ${e.localizedMessage}",
@@ -244,6 +255,7 @@ class RegisterActivity : ComponentActivity() {
                             sendOtp(trimmedEmail, password)
                         }
                     }.addOnFailureListener { firestoreError ->
+                        isLoadingSignUp = false
                         Toast.makeText(
                             context,
                             "Error checking existing account: ${firestoreError.localizedMessage}",
@@ -257,7 +269,7 @@ class RegisterActivity : ComponentActivity() {
         otpEmail = email
         otpPassword = password
 
-        val LOCAL_HOST_IP = "192.168.1.6"
+        val LOCAL_HOST_IP = "192.168.1.22"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -269,6 +281,7 @@ class RegisterActivity : ComponentActivity() {
 
                 val response = client.newCall(request).execute()
                 withContext(Dispatchers.Main) {
+                    isLoadingSignUp = false
                     if (response.isSuccessful) {
                         Toast.makeText(context, "OTP sent to $email", Toast.LENGTH_SHORT).show()
                         currentStep = 2
@@ -281,6 +294,7 @@ class RegisterActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    isLoadingSignUp = false
                     Toast.makeText(
                         context, "Error sending OTP: ${e.localizedMessage}", Toast.LENGTH_LONG
                     ).show()
@@ -290,7 +304,8 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun verifyOtp(enteredOtp: String) {
-        val LOCAL_HOST_IP = "192.168.1.6"
+        isLoadingVerify = true
+        val LOCAL_HOST_IP = "192.168.1.22"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -305,6 +320,7 @@ class RegisterActivity : ComponentActivity() {
 
                 val response = client.newCall(request).execute()
                 withContext(Dispatchers.Main) {
+                    isLoadingVerify = false
                     if (response.isSuccessful) {
                         Toast.makeText(context, "OTP Verified", Toast.LENGTH_SHORT).show()
                         saveUserToFirestore()
@@ -316,6 +332,7 @@ class RegisterActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    isLoadingVerify = false
                     Toast.makeText(
                         context, "Error verifying OTP: ${e.localizedMessage}", Toast.LENGTH_LONG
                     ).show()
@@ -459,7 +476,7 @@ class RegisterActivity : ComponentActivity() {
     }
 
     private fun sendGoogleTokenToBackend(idToken: String, displayName: String, email: String) {
-        val LOCAL_HOST_IP = "192.168.1.6"
+        val LOCAL_HOST_IP = "192.168.1.22"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -543,7 +560,9 @@ fun RegisterScreen(
     onGoogleSignInClick: () -> Unit = {},
     onSendOtp: (String, String) -> Unit = { _, _ -> },
     onVerifyOtp: (String) -> Unit = {},
-    currentStep: Int = 1
+    currentStep: Int = 1,
+    isLoadingSignUp: Boolean = false,
+    isLoadingVerify: Boolean = false
 ) {
     val context = LocalContext.current
     val textColor = Color.Black
@@ -641,7 +660,7 @@ fun RegisterScreen(
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        YellowButton2("Sign Up") {
+                        YellowButton2("Sign Up", isLoading = isLoadingSignUp) {
                             when {
                                 email.isBlank() || password.isBlank() -> {
                                     Toast.makeText(
@@ -743,7 +762,8 @@ fun RegisterScreen(
                         Spacer(modifier = Modifier.height(24.dp))
 
                         YellowButton2(
-                            text = if (!canResend) "Verify" else "Resend OTP"
+                            text = if (!canResend) "Verify" else "Resend OTP",
+                            isLoading = if (!canResend) isLoadingVerify else false
                         ) {
                             if (!canResend) {
                                 if (otp.length == 5) {
@@ -885,7 +905,7 @@ fun OTPInput2(otpText: String, onOtpChange: (String) -> Unit) {
 }
 
 @Composable
-fun YellowButton2(text: String, onClick: () -> Unit) {
+fun YellowButton2(text: String, isLoading: Boolean = false, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         modifier = Modifier
@@ -896,14 +916,20 @@ fun YellowButton2(text: String, onClick: () -> Unit) {
             containerColor = Color(0xFFFACC15), contentColor = Color.Black
         )
     ) {
-        Text(
-            text = text,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = InterFontFamily,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+            )
+        } else {
+            Text(
+                text = text,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = InterFontFamily,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

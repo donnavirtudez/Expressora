@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -1167,11 +1168,18 @@ fun AdminUserProfileScreen(navController: NavHostController, label: String) {
                         disabledContentColor = Color.Black
                     )
                 ) {
-                    Text(
-                        text = if (isLoading) "Saving..." else "Save Changes",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFontFamily
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Save Changes",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = InterFontFamily,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }
@@ -1539,11 +1547,18 @@ fun AdminChangeEmailScreen(navController: NavHostController, label: String) {
                         disabledContentColor = Color.Black
                     )
                 ) {
-                    Text(
-                        text = if (isLoading) "Saving..." else "Save Changes",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFontFamily
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Save Changes",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = InterFontFamily,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }
@@ -1905,11 +1920,18 @@ fun AdminChangePasswordScreen(navController: NavHostController, label: String) {
                         disabledContentColor = Color.Black
                     )
                 ) {
-                    Text(
-                        text = if (isLoading) "Saving..." else "Save Changes",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFontFamily
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Save Changes",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = InterFontFamily,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }

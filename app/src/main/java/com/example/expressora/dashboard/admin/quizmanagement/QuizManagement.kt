@@ -39,6 +39,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -55,14 +56,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.Image
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,12 +77,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.expressora.backend.QuizRepository
 import com.example.expressora.components.admin_bottom_nav.BottomNav2
 import com.example.expressora.components.top_nav3.TopNav3
 import com.example.expressora.dashboard.admin.analytics.AnalyticsDashboardActivity
 import com.example.expressora.dashboard.admin.communityspacemanagement.CommunitySpaceManagementActivity
 import com.example.expressora.dashboard.admin.learningmanagement.LearningManagementActivity
 import com.example.expressora.ui.theme.InterFontFamily
+import android.content.Context
+import android.content.ContentResolver
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import android.webkit.MimeTypeMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -96,10 +114,10 @@ data class Question(
 )
 
 data class Quiz(
-    val id: String = UUID.randomUUID().toString(),
+    var id: String = UUID.randomUUID().toString(),
     var difficulty: Difficulty = Difficulty.EASY,
     val questions: MutableList<Question> = mutableStateListOf(),
-    var lastUpdated: Long = System.currentTimeMillis()
+    var lastUpdated: Long = 0L // 0 means not updated yet
 )
 
 fun formatDate(time: Long): String {
@@ -146,18 +164,114 @@ fun randomPastTime(): Long {
     return System.currentTimeMillis() - (1..10).random() * 24 * 60 * 60 * 1000L
 }
 
+// Helper function to convert image to base64 data URI
+suspend fun convertImageToBase64(context: Context, imageUri: Uri): Pair<String?, String?> {
+    return try {
+        val contentResolver: ContentResolver = context.contentResolver
+        val inputStream: InputStream? = contentResolver.openInputStream(imageUri)
+
+        if (inputStream == null) {
+            val errorMsg = "Failed to open input stream from URI: $imageUri"
+            android.util.Log.e("QuizManagement", errorMsg)
+            return Pair(null, errorMsg)
+        }
+        
+        // Check image file size (max 5MB)
+        val maxFileSize = 5 * 1024 * 1024 // 5MB in bytes
+        val availableBytes = inputStream.available()
+        if (availableBytes > maxFileSize) {
+            inputStream.close()
+            val errorMsg = "Image size exceeds 5MB limit. Please use a smaller image."
+            android.util.Log.e("QuizManagement", errorMsg)
+            return Pair(null, errorMsg)
+        }
+
+        inputStream.use { stream ->
+            // For images, use bitmap conversion
+            val bitmap = BitmapFactory.decodeStream(stream)
+
+            if (bitmap == null) {
+                val errorMsg = "Failed to decode image"
+                android.util.Log.e("QuizManagement", errorMsg)
+                return Pair(null, errorMsg)
+            }
+
+            // Resize image to reduce size (max 800x800)
+            val maxSize = 800
+            val width = bitmap.width
+            val height = bitmap.height
+            val scale = if (width > height) {
+                maxSize.toFloat() / width
+            } else {
+                maxSize.toFloat() / height
+            }
+
+            val resizedBitmap = if (scale < 1.0f) {
+                Bitmap.createScaledBitmap(
+                    bitmap,
+                    (width * scale).toInt(),
+                    (height * scale).toInt(),
+                    true
+                )
+            } else {
+                bitmap
+            }
+
+            // Compress to JPEG (quality 70%)
+            val outputStream = ByteArrayOutputStream()
+            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+            val imageBytes = outputStream.toByteArray()
+
+            // Convert to base64
+            val base64String = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+            val dataUri = "data:image/jpeg;base64,$base64String"
+
+            Pair(dataUri, null)
+        }
+    } catch (e: Exception) {
+        val errorMsg = "Error converting image: ${e.message ?: e.javaClass.simpleName}"
+        android.util.Log.e("QuizManagement", errorMsg, e)
+        Pair(null, errorMsg)
+    }
+}
+
 @Composable
 fun QuizApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
+    val quizRepository = remember { QuizRepository() }
+    val sharedPref = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
+    val adminEmail = remember { sharedPref.getString("user_email", "") ?: "" }
 
-    val allQuizzes = remember {
-        mutableStateListOf(
-            Quiz(difficulty = Difficulty.EASY, lastUpdated = randomPastTime()),
-            Quiz(difficulty = Difficulty.MEDIUM, lastUpdated = randomPastTime()),
-            Quiz(difficulty = Difficulty.DIFFICULT, lastUpdated = randomPastTime()),
-            Quiz(difficulty = Difficulty.PRO, lastUpdated = randomPastTime())
-        )
+    val allQuizzes = remember { mutableStateListOf<Quiz>() }
+
+    // Load quizzes from Firebase on init
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val result = quizRepository.getQuizzes()
+            result.onSuccess { quizzes ->
+                withContext(Dispatchers.Main) {
+                    allQuizzes.clear()
+                    // Ensure we have a quiz for each difficulty level
+                    Difficulty.values().forEach { diff ->
+                        val existingQuiz = quizzes.find { it.difficulty == diff }
+                        if (existingQuiz != null) {
+                            allQuizzes.add(existingQuiz)
+                        } else {
+                            allQuizzes.add(Quiz(difficulty = diff))
+                        }
+                    }
+                }
+            }.onFailure { e ->
+                withContext(Dispatchers.Main) {
+                    // Initialize with empty quizzes for each difficulty
+                    Difficulty.values().forEach { diff ->
+                        allQuizzes.add(Quiz(difficulty = diff))
+                    }
+                    Toast.makeText(context, "Failed to load quizzes: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -201,9 +315,27 @@ fun QuizApp() {
                     val quizId = backEntry.arguments?.getString("quizId") ?: return@composable
                     val quiz = allQuizzes.find { it.id == quizId } ?: return@composable
 
-                    ManageQuizScreen(
-                        quiz = quiz, navController = navController, context = context
-                    )
+                            ManageQuizScreen(
+                                quiz = quiz,
+                                navController = navController, 
+                                context = context,
+                                quizRepository = quizRepository,
+                                adminEmail = adminEmail,
+                                onQuizUpdated = { updatedQuiz ->
+                                    val index = allQuizzes.indexOfFirst { it.id == updatedQuiz.id }
+                                    if (index != -1) {
+                                        allQuizzes[index] = updatedQuiz
+                                    } else {
+                                        allQuizzes.add(updatedQuiz)
+                                    }
+                                },
+                                onQuizDeleted = { deletedQuizId ->
+                                    val quizToRemove = allQuizzes.find { it.id == deletedQuizId }
+                                    if (quizToRemove != null) {
+                                        allQuizzes.remove(quizToRemove)
+                                    }
+                                }
+                            )
                 }
 
                 composable("addQuestion/{quizId}") { backEntry ->
@@ -223,11 +355,49 @@ fun QuizApp() {
                     QuestionEditorScreen(
                         title = "Add Question",
                         question = newQuestion,
+                        quiz = quiz,
+                        quizRepository = quizRepository,
+                        adminEmail = adminEmail,
                         onSaveConfirmed = { question ->
+                            // Update UI immediately (real-time)
                             quiz.questions.add(question)
-                            quiz.lastUpdated = System.currentTimeMillis()
-                            Toast.makeText(context, "Question added", Toast.LENGTH_SHORT).show()
-                            navController.popBackStack()
+                            if (quiz.id.length > 20) {
+                                quiz.lastUpdated = System.currentTimeMillis()
+                            }
+                            // Update local state immediately
+                            val index = allQuizzes.indexOfFirst { it.difficulty == quiz.difficulty }
+                            if (index != -1) {
+                                allQuizzes[index] = quiz
+                            } else {
+                                allQuizzes.add(quiz)
+                            }
+                            
+                            // Validate quiz has at least 1 question before saving
+                            if (quiz.questions.isNotEmpty()) {
+                                // Save to Firebase in background (non-blocking)
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    val result = quizRepository.saveQuiz(quiz, adminEmail)
+                                    withContext(Dispatchers.Main) {
+                                        if (result.isSuccess) {
+                                            // Update quiz ID if it was a new quiz
+                                            val savedQuizId = result.getOrNull()
+                                            if (savedQuizId != null && quiz.id != savedQuizId) {
+                                                quiz.id = savedQuizId
+                                                val updateIndex = allQuizzes.indexOfFirst { it.difficulty == quiz.difficulty }
+                                                if (updateIndex != -1) {
+                                                    allQuizzes[updateIndex] = quiz
+                                                }
+                                            }
+                                            Toast.makeText(context, "Question added and saved", Toast.LENGTH_SHORT).show()
+                                            navController.popBackStack()
+                                        } else {
+                                            Toast.makeText(context, "Failed to save: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            } else {
+                                Toast.makeText(context, "Quiz must have at least 1 question", Toast.LENGTH_SHORT).show()
+                            }
                         },
                         isAdd = true
                     )
@@ -241,13 +411,52 @@ fun QuizApp() {
                     val question = quiz.questions.find { it.id == questionId } ?: return@composable
 
                     QuestionEditorScreen(
-                        title = "Edit Question", question = question, onSaveConfirmed = { updated ->
+                        title = "Edit Question", 
+                        question = question,
+                        quiz = quiz,
+                        quizRepository = quizRepository,
+                        adminEmail = adminEmail,
+                        onSaveConfirmed = { updated ->
+                            // Update UI immediately (real-time)
                             val index = quiz.questions.indexOfFirst { it.id == updated.id }
                             if (index != -1) quiz.questions[index] = updated
-                            quiz.lastUpdated = System.currentTimeMillis()
-                            Toast.makeText(context, "Question updated", Toast.LENGTH_SHORT).show()
-                            navController.popBackStack()
-                        }, isAdd = false
+                            if (quiz.id.length > 20) {
+                                quiz.lastUpdated = System.currentTimeMillis()
+                            }
+                            // Update local state immediately
+                            val quizIndex = allQuizzes.indexOfFirst { it.difficulty == quiz.difficulty }
+                            if (quizIndex != -1) {
+                                allQuizzes[quizIndex] = quiz
+                            }
+                            
+                            // Validate quiz has at least 1 question before saving
+                            if (quiz.questions.isNotEmpty()) {
+                                // Save to Firebase in background (non-blocking)
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    val result = quizRepository.saveQuiz(quiz, adminEmail)
+                                    withContext(Dispatchers.Main) {
+                                        if (result.isSuccess) {
+                                            // Update quiz ID if changed
+                                            val savedQuizId = result.getOrNull()
+                                            if (savedQuizId != null && quiz.id != savedQuizId) {
+                                                quiz.id = savedQuizId
+                                                val updateIndex = allQuizzes.indexOfFirst { it.difficulty == quiz.difficulty }
+                                                if (updateIndex != -1) {
+                                                    allQuizzes[updateIndex] = quiz
+                                                }
+                                            }
+                                            Toast.makeText(context, "Question updated and saved", Toast.LENGTH_SHORT).show()
+                                            navController.popBackStack()
+                                        } else {
+                                            Toast.makeText(context, "Failed to save: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            } else {
+                                Toast.makeText(context, "Quiz must have at least 1 question", Toast.LENGTH_SHORT).show()
+                            }
+                        }, 
+                        isAdd = false
                     )
                 }
             }
@@ -325,18 +534,20 @@ fun QuizCard(quiz: Quiz, onAdd: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 DifficultyBadge(quiz.difficulty)
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "${quiz.questions.size} question(s)",
-                    color = MutedText,
-                    fontSize = 14.sp,
-                    fontFamily = InterFontFamily
-                )
-                Text(
-                    "Updated ${getTimeAgo(quiz.lastUpdated)}\n${formatDate(quiz.lastUpdated)}",
-                    color = MutedText,
-                    fontSize = 14.sp,
-                    fontFamily = InterFontFamily
-                )
+                        Text(
+                            "${quiz.questions.size} question(s)",
+                            color = MutedText,
+                            fontSize = 14.sp,
+                            fontFamily = InterFontFamily
+                        )
+                        if (quiz.lastUpdated > 0) {
+                            Text(
+                                "Updated ${getTimeAgo(quiz.lastUpdated)}\n${formatDate(quiz.lastUpdated)}",
+                                color = MutedText,
+                                fontSize = 14.sp,
+                                fontFamily = InterFontFamily
+                            )
+                        }
             }
 
             IconButton(onClick = onAdd) {
@@ -370,9 +581,19 @@ fun DifficultyBadge(difficulty: Difficulty) {
 
 @Composable
 fun ManageQuizScreen(
-    quiz: Quiz, navController: NavController, context: android.content.Context
+    quiz: Quiz, 
+    navController: NavController, 
+    context: android.content.Context,
+    quizRepository: QuizRepository,
+    adminEmail: String,
+    onQuizUpdated: (Quiz) -> Unit,
+    onQuizDeleted: (String) -> Unit
 ) {
     val deleteDialog = remember { mutableStateOf<Pair<Boolean, String?>>(false to null) }
+    // Track questions count to force recomposition when questions are deleted
+    val questionsCount = remember(quiz.questions.size) { mutableStateOf(quiz.questions.size) }
+    val isLoading = remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -404,18 +625,43 @@ fun ManageQuizScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            "Questions (${quiz.questions.size})", fontFamily = InterFontFamily, color = MutedText
+            "Questions (${questionsCount.value})", fontFamily = InterFontFamily, color = MutedText
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(
-            modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(quiz.questions) { question ->
-                QuestionCard(
-                    question = question,
-                    onEdit = { navController.navigate("editQuestion/${quiz.id}/${question.id}") },
-                    onDelete = { deleteDialog.value = true to question.id })
+        // Use LaunchedEffect to watch for changes in questions list
+        LaunchedEffect(quiz.questions.size) {
+            questionsCount.value = quiz.questions.size
+        }
+        
+        Box(modifier = Modifier.weight(1f)) {
+            if (isLoading.value) {
+                // Show loading indicator
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.Black,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(
+                        items = quiz.questions,
+                        key = { it.id }
+                    ) { question ->
+                        QuestionCard(
+                            question = question,
+                            onEdit = { navController.navigate("editQuestion/${quiz.id}/${question.id}") },
+                            onDelete = { deleteDialog.value = true to question.id })
+                    }
+                }
             }
         }
     }
@@ -428,10 +674,105 @@ fun ManageQuizScreen(
             confirmColor = Color.Red,
             onDismiss = { deleteDialog.value = false to null },
             onConfirm = {
-                quiz.questions.removeAll { it.id == deleteDialog.value.second }
-                quiz.lastUpdated = System.currentTimeMillis()
-                Toast.makeText(context, "Question deleted", Toast.LENGTH_SHORT).show()
+                val questionIdToDelete = deleteDialog.value.second
                 deleteDialog.value = false to null
+                
+                // Show loading indicator
+                isLoading.value = true
+                
+                // Remove from UI immediately (real-time update)
+                val removed = quiz.questions.removeAll { it.id == questionIdToDelete }
+                
+                if (removed) {
+                    // Update questions count to force recomposition
+                    questionsCount.value = quiz.questions.size
+                    
+                    // Update quiz in Firebase immediately (real-time)
+                    if (quiz.id.length > 20) { // Only update if quiz exists
+                        quiz.lastUpdated = System.currentTimeMillis()
+                    }
+                    onQuizUpdated(quiz) // Update UI immediately - no delay, stays on manage quiz screen
+                }
+                
+                // Save to Firebase and reload quiz data
+                scope.launch(Dispatchers.IO) {
+                    if (quiz.questions.isEmpty() && quiz.id.length > 20) {
+                        // Validate quiz exists before deleting
+                        val quizExists = try {
+                            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                            val existingQuiz = firestore.collection("quizzes")
+                                .document(quiz.id)
+                                .get()
+                                .await()
+                            existingQuiz.exists()
+                        } catch (e: Exception) {
+                            false
+                        }
+                        
+                        if (!quizExists) {
+                            withContext(Dispatchers.Main) {
+                                isLoading.value = false
+                                Toast.makeText(context, "Quiz not found. It may have been already deleted.", Toast.LENGTH_SHORT).show()
+                                onQuizDeleted(quiz.id) // Remove from local list anyway
+                                // Navigate to quiz list screen
+                                navController.navigate("list") {
+                                    popUpTo("list") { inclusive = false }
+                                }
+                            }
+                            return@launch
+                        }
+                        
+                        // Delete entire quiz from Firebase if no questions left
+                        val result = quizRepository.deleteQuiz(quiz.id)
+                        withContext(Dispatchers.Main) {
+                            isLoading.value = false
+                            if (result.isSuccess) {
+                                // Remove from local list via callback
+                                onQuizDeleted(quiz.id)
+                                Toast.makeText(context, "Quiz deleted (no questions remaining)", Toast.LENGTH_SHORT).show()
+                                // Navigate to quiz list screen
+                                navController.navigate("list") {
+                                    popUpTo("list") { inclusive = false }
+                                }
+                            } else {
+                                Toast.makeText(context, "Failed to delete: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        // Update quiz in Firebase - DO NOT navigate, stay on manage quiz screen
+                        val result = quizRepository.saveQuiz(quiz, adminEmail)
+                        
+                        // After saving, reload the quiz from Firebase to get fresh data
+                        if (result.isSuccess) {
+                            val reloadResult = quizRepository.getQuizByDifficulty(quiz.difficulty)
+                            withContext(Dispatchers.Main) {
+                                isLoading.value = false
+                                if (reloadResult.isSuccess) {
+                                    val reloadedQuiz = reloadResult.getOrNull()
+                                    if (reloadedQuiz != null) {
+                                        // Update quiz with fresh data from Firebase
+                                        quiz.questions.clear()
+                                        quiz.questions.addAll(reloadedQuiz.questions)
+                                        quiz.id = reloadedQuiz.id
+                                        quiz.lastUpdated = reloadedQuiz.lastUpdated
+                                        questionsCount.value = quiz.questions.size
+                                        onQuizUpdated(quiz) // Update UI with fresh data
+                                        Toast.makeText(context, "Question deleted and saved", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Question deleted and saved", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Question deleted and saved", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                isLoading.value = false
+                                Toast.makeText(context, "Failed to save: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
             })
     }
 }
@@ -439,29 +780,108 @@ fun ManageQuizScreen(
 @SuppressLint("RememberReturnType")
 @Composable
 fun QuestionEditorScreen(
-    title: String, question: Question, onSaveConfirmed: (Question) -> Unit, isAdd: Boolean
+    title: String, 
+    question: Question,
+    quiz: Quiz,
+    quizRepository: QuizRepository,
+    adminEmail: String,
+    onSaveConfirmed: (Question) -> Unit, 
+    isAdd: Boolean
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     var questionText by rememberSaveable { mutableStateOf(question.text) }
     var correctAnswer by rememberSaveable { mutableStateOf(question.correctAnswer) }
     var wrongOptionsText by rememberSaveable { mutableStateOf(question.wrongOptions.joinToString(", ")) }
-    var localImageUri by rememberSaveable { mutableStateOf(question.imageUri) }
+    // Check if imageUri is already a base64 data URI
+    val initialImageUri = question.imageUri
+    val initialImageUriString = initialImageUri?.toString() ?: ""
+    val isBase64Uri = initialImageUriString.startsWith("data:image")
+    var localImageUri by rememberSaveable { 
+        mutableStateOf(if (isBase64Uri) null else initialImageUri) 
+    }
+    var imageBase64Uri by rememberSaveable { 
+        mutableStateOf<String?>(if (isBase64Uri) initialImageUriString else null) 
+    }
+    var isProcessingImage by remember { mutableStateOf(false) }
     val saveDialogVisible = remember { mutableStateOf(false) }
 
-    val imagePicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            localImageUri = uri
-        }
+            val imagePicker =
+                rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                    if (uri != null) {
+                        // Check if it's an image (not GIF)
+                        val mimeType = context.contentResolver.getType(uri) ?: ""
+                        if (!mimeType.contains("gif", ignoreCase = true) && !uri.toString().lowercase().endsWith(".gif")) {
+                            localImageUri = uri
+                            imageBase64Uri = null
+                            // Convert to base64 in background
+                            isProcessingImage = true
+                            coroutineScope.launch(Dispatchers.IO) {
+                                val (base64Uri, error) = convertImageToBase64(context, uri)
+                                withContext(Dispatchers.Main) {
+                                    isProcessingImage = false
+                                    if (base64Uri != null) {
+                                        imageBase64Uri = base64Uri
+                                    } else {
+                                        Toast.makeText(context, "Failed to process image: ${error ?: "Unknown error"}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        } else {
+                            Toast.makeText(context, "GIFs are not supported. Please select an image.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
 
-    val isSaveEnabled by remember(questionText, correctAnswer, wrongOptionsText, localImageUri) {
+    val isSaveEnabled by remember(questionText, correctAnswer, wrongOptionsText, localImageUri, imageBase64Uri) {
         derivedStateOf {
+            val wrongOptionsList = wrongOptionsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            val hasValidWrongOptions = wrongOptionsList.size >= 1 && wrongOptionsList.size <= 3
+            val hasImage = imageBase64Uri != null || localImageUri != null
+            
+            // Validate text lengths
+            val questionTextTrimmed = questionText.trim()
+            val correctAnswerTrimmed = correctAnswer.trim()
+            val maxQuestionLength = 500
+            val maxAnswerLength = 100
+            val isValidQuestionLength = questionTextTrimmed.length <= maxQuestionLength && questionTextTrimmed.isNotEmpty()
+            val isValidAnswerLength = correctAnswerTrimmed.length <= maxAnswerLength && correctAnswerTrimmed.isNotEmpty()
+            val isValidWrongOptionsLength = wrongOptionsList.all { it.length <= maxAnswerLength }
+            
+            // Validate image size (base64 max ~5MB = ~6.67MB base64 string)
+            val maxImageSize = 6_700_000 // ~5MB in base64
+            val currentImageBase64Uri = imageBase64Uri // Local variable for smart cast
+            val isValidImageSize = if (currentImageBase64Uri != null) {
+                currentImageBase64Uri.length <= maxImageSize
+            } else {
+                true // Local URI size will be checked when converting
+            }
+            
             val allFieldsFilled =
-                questionText.isNotBlank() && correctAnswer.isNotBlank() && wrongOptionsText.isNotBlank() && localImageUri != null
-            if (isAdd) allFieldsFilled
-            else allFieldsFilled && (questionText != question.text || correctAnswer != question.correctAnswer || wrongOptionsText != question.wrongOptions.joinToString(
-                ", "
-            ) || localImageUri != question.imageUri)
+                isValidQuestionLength && isValidAnswerLength && hasValidWrongOptions && hasImage && isValidWrongOptionsLength && isValidImageSize
+            
+            if (isAdd) {
+                allFieldsFilled
+            } else {
+                val originalWrongOptionsText = question.wrongOptions.joinToString(", ")
+                val currentLocalUri = localImageUri
+                val currentImageBase64UriForCheck = imageBase64Uri // Local variable for smart cast
+                val imageChanged = if (currentImageBase64UriForCheck != null) {
+                    // New base64 image was set
+                    currentImageBase64UriForCheck != (question.imageUri?.toString()?.takeIf { it.startsWith("data:image") })
+                } else {
+                    // Check if local URI changed
+                    currentLocalUri != question.imageUri
+                }
+                
+                allFieldsFilled && (
+                    questionText != question.text || 
+                    correctAnswer != question.correctAnswer || 
+                    wrongOptionsText != originalWrongOptionsText ||
+                    imageChanged
+                )
+            }
         }
     }
 
@@ -494,15 +914,32 @@ fun QuestionEditorScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
-            value = questionText, onValueChange = { questionText = it }, label = {
+            value = questionText, 
+            onValueChange = { 
+                if (it.length <= 500) {
+                    questionText = it
+                } else {
+                    Toast.makeText(context, "Question text cannot exceed 500 characters", Toast.LENGTH_SHORT).show()
+                }
+            }, 
+            label = {
                 Text("Question", fontFamily = InterFontFamily, color = Color(0xFF666666))
-            }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(
+            }, 
+            modifier = Modifier.fillMaxWidth(), 
+            colors = OutlinedTextFieldDefaults.colors(
                 cursorColor = Color.Black,
                 focusedTextColor = Color.Black,
                 unfocusedTextColor = Color(0xFF666666),
                 focusedBorderColor = Color.Black,
                 unfocusedBorderColor = Color(0xFF666666)
-            )
+            ),
+            supportingText = {
+                Text(
+                    "${questionText.trim().length}/500 characters",
+                    fontFamily = InterFontFamily,
+                    color = if (questionText.trim().length > 500) Color.Red else Color(0xFF666666)
+                )
+            }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -514,24 +951,54 @@ fun QuestionEditorScreen(
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFFF2F4F7)), contentAlignment = Alignment.Center
         ) {
-            if (localImageUri != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context).data(localImageUri).crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Crop
-                )
+            if (isProcessingImage) {
+                Text("Processing image...", color = MutedText, fontFamily = InterFontFamily)
             } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Add,
+                val bitmap = remember(imageBase64Uri, localImageUri) {
+                    val base64Uri = imageBase64Uri
+                    val localUri = localImageUri
+                    when {
+                        base64Uri != null && base64Uri.startsWith("data:image") -> {
+                            try {
+                                val base64String = base64Uri.substringAfter(",")
+                                if (base64String.isNotEmpty()) {
+                                    val imageBytes = Base64.decode(base64String, Base64.NO_WRAP)
+                                    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                                } else null
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        localUri != null -> {
+                            try {
+                                val inputStream = context.contentResolver.openInputStream(localUri)
+                                inputStream?.use { BitmapFactory.decodeStream(it) }
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        else -> null
+                    }
+                }
+                
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
                         contentDescription = null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.Crop
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Upload sign image / GIF", color = MutedText, fontFamily = InterFontFamily)
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(44.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Upload sign image", color = MutedText, fontFamily = InterFontFamily)
+                    }
                 }
             }
             Box(
@@ -543,25 +1010,84 @@ fun QuestionEditorScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
-            value = correctAnswer, onValueChange = { correctAnswer = it }, label = {
+            value = correctAnswer, 
+            onValueChange = { 
+                if (it.length <= 100) {
+                    correctAnswer = it
+                } else {
+                    Toast.makeText(context, "Answer cannot exceed 100 characters", Toast.LENGTH_SHORT).show()
+                }
+            }, 
+            label = {
                 Text("Correct Answer", fontFamily = InterFontFamily, color = Color(0xFF666666))
-            }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(
+            }, 
+            modifier = Modifier.fillMaxWidth(), 
+            colors = OutlinedTextFieldDefaults.colors(
                 cursorColor = Color.Black,
                 focusedTextColor = Color.Black,
                 unfocusedTextColor = Color(0xFF666666),
                 focusedBorderColor = Color.Black,
                 unfocusedBorderColor = Color(0xFF666666)
-            )
+            ),
+            supportingText = {
+                Text(
+                    "${correctAnswer.trim().length}/100 characters",
+                    fontFamily = InterFontFamily,
+                    color = if (correctAnswer.trim().length > 100) Color.Red else Color(0xFF666666)
+                )
+            }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
             value = wrongOptionsText,
-            onValueChange = { wrongOptionsText = it },
+            onValueChange = { newValue ->
+                // Count current options (before change)
+                val currentOptions = wrongOptionsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                // Count new options (after change)
+                val newOptions = newValue.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                
+                // Check if correct answer is being added to wrong options
+                val correctAnswerTrimmed = correctAnswer.trim()
+                if (correctAnswerTrimmed.isNotEmpty()) {
+                    val containsCorrectAnswer = newOptions.any { it.equals(correctAnswerTrimmed, ignoreCase = true) }
+                    if (containsCorrectAnswer) {
+                        Toast.makeText(context, "Correct answer cannot be used as a wrong option", Toast.LENGTH_SHORT).show()
+                        return@OutlinedTextField
+                    }
+                }
+                
+                // Check for duplicate wrong options (case-insensitive)
+                val duplicateOptions = newOptions.groupingBy { it.lowercase() }.eachCount().filter { it.value > 1 }
+                if (duplicateOptions.isNotEmpty()) {
+                    Toast.makeText(context, "Duplicate wrong options are not allowed", Toast.LENGTH_SHORT).show()
+                    return@OutlinedTextField
+                }
+                
+                // If already have 3 options, prevent adding more commas
+                if (currentOptions.size >= 3) {
+                    // Count commas in current and new value
+                    val currentCommaCount = wrongOptionsText.count { it == ',' }
+                    val newCommaCount = newValue.count { it == ',' }
+                    
+                    // If trying to add a comma when already at 3 options, prevent it
+                    if (newCommaCount > currentCommaCount) {
+                        Toast.makeText(context, "Maximum 3 wrong options allowed", Toast.LENGTH_SHORT).show()
+                        return@OutlinedTextField
+                    }
+                }
+                
+                // Limit to 3 wrong options
+                if (newOptions.size <= 3) {
+                    wrongOptionsText = newValue
+                } else {
+                    Toast.makeText(context, "Maximum 3 wrong options allowed", Toast.LENGTH_SHORT).show()
+                }
+            },
             label = {
                 Text(
-                    "Wrong Options (comma separated)",
+                    "Wrong Options (comma separated, max 3)",
                     fontFamily = InterFontFamily,
                     color = Color(0xFF666666)
                 )
@@ -573,7 +1099,15 @@ fun QuestionEditorScreen(
                 unfocusedTextColor = Color(0xFF666666),
                 focusedBorderColor = Color.Black,
                 unfocusedBorderColor = Color(0xFF666666)
-            )
+            ),
+            supportingText = {
+                val optionCount = wrongOptionsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size
+                Text(
+                    "$optionCount/3 options",
+                    fontFamily = InterFontFamily,
+                    color = if (optionCount > 3) Color.Red else Color(0xFF666666)
+                )
+            }
         )
     }
 
@@ -587,13 +1121,26 @@ fun QuestionEditorScreen(
             onDismiss = { saveDialogVisible.value = false },
             onConfirm = {
                 saveDialogVisible.value = false
+                // Use base64 URI if available, otherwise use local URI
+                val currentImageBase64UriForSave = imageBase64Uri // Local variable for smart cast
+                val finalImageUri = if (currentImageBase64UriForSave != null) {
+                    // Store base64 URI as string in the question
+                    android.net.Uri.parse(currentImageBase64UriForSave)
+                } else {
+                    localImageUri
+                }
+                
+                val wrongOptionsList = wrongOptionsText.split(",").map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .take(3) // Ensure max 3 options
+                    .toMutableList()
+                
                 onSaveConfirmed(
                     question.copy(
                         text = questionText,
-                        imageUri = localImageUri,
+                        imageUri = finalImageUri,
                         correctAnswer = correctAnswer.trim(),
-                        wrongOptions = wrongOptionsText.split(",").map { it.trim() }
-                            .filter { it.isNotEmpty() }.toMutableList()
+                        wrongOptions = wrongOptionsList
                     )
                 )
             })
@@ -656,15 +1203,59 @@ fun QuestionCard(question: Question, onEdit: () -> Unit, onDelete: () -> Unit) {
                 modifier = Modifier
                     .size(64.dp)
                     .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF2F4F7))
             ) {
-                if (question.imageUri != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current).data(question.imageUri)
-                            .crossfade(true).build(),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentScale = ContentScale.Crop
-                    )
+                if (question.imageUri != null && question.imageUri.toString().isNotEmpty()) {
+                    val context = LocalContext.current
+                    val imageData = if (question.imageUri.toString().startsWith("data:image")) {
+                        question.imageUri.toString()
+                    } else {
+                        question.imageUri
+                    }
+                    
+                    // Try to decode as bitmap first
+                    val bitmap = remember(imageData) {
+                        if (imageData.toString().startsWith("data:image")) {
+                            try {
+                                val base64String = imageData.toString().substringAfter(",")
+                                if (base64String.isNotEmpty()) {
+                                    val imageBytes = Base64.decode(base64String, Base64.NO_WRAP)
+                                    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                                } else null
+                            } catch (e: Exception) {
+                                null
+                            }
+                        } else {
+                            try {
+                                val inputStream = context.contentResolver.openInputStream(imageData as Uri)
+                                inputStream?.use { BitmapFactory.decodeStream(it) }
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                    }
+                    
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        // Fallback to AsyncImage if bitmap decoding fails
+                        AsyncImage(
+                            model = ImageRequest.Builder(context).data(imageData)
+                                .crossfade(true).build(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 }
             }
 

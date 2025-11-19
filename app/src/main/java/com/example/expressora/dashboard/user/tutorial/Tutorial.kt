@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.expressora.R
 import com.example.expressora.components.top_nav.TopNav
+import com.example.expressora.components.top_nav.rememberNotificationCount
 import com.example.expressora.components.user_bottom_nav.BottomNav
 import com.example.expressora.components.user_top_nav2.TopTabNav2
 import com.example.expressora.dashboard.user.learn.LearnActivity
@@ -140,9 +141,14 @@ fun TutorialScreen() {
         }
     }
 
+    val sharedPref = remember { context.getSharedPreferences("user_session", android.content.Context.MODE_PRIVATE) }
+    val userEmail = remember { sharedPref.getString("user_email", "") ?: "" }
+    val userRole = remember { sharedPref.getString("user_role", "user") ?: "user" }
+    val notificationCount = rememberNotificationCount(userEmail, userRole)
+
     Scaffold(topBar = {
         Column {
-            TopNav(notificationCount = 2, onProfileClick = {
+            TopNav(notificationCount = notificationCount, onProfileClick = {
                 context.startActivity(Intent(context, SettingsActivity::class.java))
             }, onTranslateClick = {
                 { /* already in tutorial */ }

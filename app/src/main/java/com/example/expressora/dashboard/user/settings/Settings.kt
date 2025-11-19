@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -92,6 +93,7 @@ import coil.compose.AsyncImage
 import com.example.expressora.R
 import com.example.expressora.auth.LoginActivity
 import com.example.expressora.components.top_nav.TopNav
+import com.example.expressora.components.top_nav.rememberNotificationCount
 import com.example.expressora.components.user_bottom_nav.BottomNav
 import com.example.expressora.dashboard.admin.settings.AdminSettingsRow
 import com.example.expressora.dashboard.user.community_space.CommunitySpaceActivity
@@ -198,12 +200,16 @@ fun SettingsScreen(navController: NavHostController) {
         "Personal Information", "Account Information", "Preferences", "Log Out"
     )
     val context = LocalContext.current
+    val sharedPref = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
+    val userEmail = remember { sharedPref.getString("user_email", "") ?: "" }
+    val userRole = remember { sharedPref.getString("user_role", "user") ?: "user" }
+    val notificationCount = rememberNotificationCount(userEmail, userRole)
     val logoutDialogVisible = remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopNav(
-                notificationCount = 2,
+                notificationCount = notificationCount,
                 onProfileClick = { /* already in user settings */ },
                 onTranslateClick = {
                     context.startActivity(Intent(context, CommunitySpaceActivity::class.java))
@@ -635,10 +641,12 @@ fun AccountInfoScreen(navController: NavHostController, label: String) {
     // Load current email immediately from SharedPreferences (no delay)
     val sharedPref = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
     val email = remember { sharedPref.getString("user_email", "") ?: "" }
+    val userRole = remember { sharedPref.getString("user_role", "user") ?: "user" }
+    val notificationCount = rememberNotificationCount(email, userRole)
 
     Scaffold(
         topBar = {
-            TopNav(notificationCount = 2, onProfileClick = {
+            TopNav(notificationCount = notificationCount, onProfileClick = {
                 { /* already in user settings */ }
             }, onTranslateClick = {
                 context.startActivity(Intent(context, CommunitySpaceActivity::class.java))
@@ -776,10 +784,15 @@ fun UserProfileScreen(navController: NavHostController, label: String) {
         }
     }
 
+    val sharedPrefForNotification = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
+    val userEmailForNotification = remember { sharedPrefForNotification.getString("user_email", "") ?: "" }
+    val userRoleForNotification = remember { sharedPrefForNotification.getString("user_role", "user") ?: "user" }
+    val notificationCountForPersonalInfo = rememberNotificationCount(userEmailForNotification, userRoleForNotification)
+
     Scaffold(
         topBar = {
             TopNav(
-                notificationCount = 2,
+                notificationCount = notificationCountForPersonalInfo,
                 onProfileClick = { /* already in user settings */ },
                 onTranslateClick = {
                     context.startActivity(Intent(context, CommunitySpaceActivity::class.java))
@@ -1159,11 +1172,18 @@ fun UserProfileScreen(navController: NavHostController, label: String) {
                         disabledContentColor = Color.Black
                     )
                 ) {
-                    Text(
-                        text = if (isLoading) "Saving..." else "Save Changes",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFontFamily
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Save Changes",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = InterFontFamily,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }
@@ -1247,9 +1267,14 @@ fun ChangeEmailScreen(navController: NavHostController, label: String) {
         }
     }
 
+    val sharedPrefForNotification = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
+    val userEmailForNotification = remember { sharedPrefForNotification.getString("user_email", "") ?: "" }
+    val userRoleForNotification = remember { sharedPrefForNotification.getString("user_role", "user") ?: "user" }
+    val notificationCountForScreen = rememberNotificationCount(userEmailForNotification, userRoleForNotification)
+
     Scaffold(
         topBar = {
-            TopNav(notificationCount = 2, onProfileClick = {
+            TopNav(notificationCount = notificationCountForScreen, onProfileClick = {
                 { /* already in user settings */ }
             }, onTranslateClick = {
                 context.startActivity(Intent(context, CommunitySpaceActivity::class.java))
@@ -1523,11 +1548,18 @@ fun ChangeEmailScreen(navController: NavHostController, label: String) {
                         disabledContentColor = Color.Black
                     )
                 ) {
-                    Text(
-                        text = if (isLoading) "Saving..." else "Save Changes",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFontFamily
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Save Changes",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = InterFontFamily,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }
@@ -1563,9 +1595,14 @@ fun ChangePasswordScreen(navController: NavHostController, label: String) {
         }
     }
 
+    val sharedPrefForNotification = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
+    val userEmailForNotification = remember { sharedPrefForNotification.getString("user_email", "") ?: "" }
+    val userRoleForNotification = remember { sharedPrefForNotification.getString("user_role", "user") ?: "user" }
+    val notificationCountForScreen = rememberNotificationCount(userEmailForNotification, userRoleForNotification)
+
     Scaffold(
         topBar = {
-            TopNav(notificationCount = 2, onProfileClick = {
+            TopNav(notificationCount = notificationCountForScreen, onProfileClick = {
                 { /* already in user settings */ }
             }, onTranslateClick = {
                 context.startActivity(Intent(context, CommunitySpaceActivity::class.java))
@@ -1879,11 +1916,18 @@ fun ChangePasswordScreen(navController: NavHostController, label: String) {
                         disabledContentColor = Color.Black
                     )
                 ) {
-                    Text(
-                        text = if (isLoading) "Saving..." else "Save Changes",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFontFamily
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Save Changes",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = InterFontFamily,
+                            color = Color.Black
+                        )
+                    }
                 }
             }
         }
@@ -1936,9 +1980,14 @@ fun PreferencesScreen(label: String) {
         }
     }
 
+    val sharedPrefForNotification = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
+    val userEmailForNotification = remember { sharedPrefForNotification.getString("user_email", "") ?: "" }
+    val userRoleForNotification = remember { sharedPrefForNotification.getString("user_role", "user") ?: "user" }
+    val notificationCountForScreen = rememberNotificationCount(userEmailForNotification, userRoleForNotification)
+
     Scaffold(
         topBar = {
-            TopNav(notificationCount = 2, onProfileClick = {
+            TopNav(notificationCount = notificationCountForScreen, onProfileClick = {
                 { /* already in user settings */ }
             }, onTranslateClick = {
                 context.startActivity(Intent(context, CommunitySpaceActivity::class.java))

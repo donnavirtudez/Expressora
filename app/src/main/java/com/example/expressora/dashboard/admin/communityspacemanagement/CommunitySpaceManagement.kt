@@ -9,6 +9,9 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.example.expressora.auth.LoginActivity
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -198,17 +201,69 @@ fun getTimeAgo(time: Long): String {
 private fun nextPostId(posts: List<Post>): Int = (posts.maxOfOrNull { it.id } ?: 0) + 1
 private fun nextCommentId(post: Post): Int = (post.comments.maxOfOrNull { it.id } ?: 0) + 1
 
+// Helper function to validate user exists in Firestore with correct role
+fun ComponentActivity.validateUserAndRole(requiredRole: String, callback: (Boolean) -> Unit) {
+    val sharedPref = getSharedPreferences("user_session", Context.MODE_PRIVATE)
+    val userEmail = sharedPref.getString("user_email", null)
+    
+    if (userEmail == null) {
+        callback(false)
+        return
+    }
+    
+    val firestore = FirebaseFirestore.getInstance()
+    firestore.collection("users")
+        .whereEqualTo("email", userEmail)
+        .whereEqualTo("role", requiredRole)
+        .get()
+        .addOnSuccessListener { snapshot ->
+            callback(!snapshot.isEmpty)
+        }
+        .addOnFailureListener {
+            callback(false)
+        }
+}
+
+// Helper function to perform logout
+fun performLogout(context: Context) {
+    FirebaseAuth.getInstance().signOut()
+    FirebaseFirestore.getInstance().clearPersistence()
+
+    val sharedPref = context.getSharedPreferences("user_session", Context.MODE_PRIVATE)
+    with(sharedPref.edit()) {
+        clear()
+        apply()
+    }
+
+    val intent = Intent(context, LoginActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    }
+    context.startActivity(intent)
+}
+
 class CommunitySpaceManagementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            val customSelectionColors = TextSelectionColors(
-                handleColor = Color(0xFFFACC15),
-                backgroundColor = Color(0x33FACC15)
-            )
+        
+        // Validate user exists in Firestore with admin role
+        validateUserAndRole("admin") { isValid ->
+            if (!isValid) {
+                // User doesn't exist or wrong role, logout and redirect to login
+                performLogout(this)
+                finish()
+                return@validateUserAndRole
+            }
+            
+            // User is valid, show the screen
+            setContent {
+                val customSelectionColors = TextSelectionColors(
+                    handleColor = Color(0xFFFACC15),
+                    backgroundColor = Color(0x33FACC15)
+                )
 
-            CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
-                CommunitySpaceManagementScreen()
+                CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
+                    CommunitySpaceManagementScreen()
+                }
             }
         }
     }

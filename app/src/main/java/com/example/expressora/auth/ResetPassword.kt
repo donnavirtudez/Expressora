@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -89,6 +90,9 @@ class ResetPasswordActivity : ComponentActivity() {
     private var currentStep by mutableStateOf(1)
     private var isOtpSent by mutableStateOf(false)
     private var isPasswordReset by mutableStateOf(false)
+    private var isLoadingNext by mutableStateOf(false)
+    private var isLoadingVerify by mutableStateOf(false)
+    private var isLoadingReset by mutableStateOf(false)
 
     private val client: OkHttpClient = OkHttpClient.Builder().callTimeout(30, TimeUnit.SECONDS)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
@@ -143,7 +147,10 @@ class ResetPasswordActivity : ComponentActivity() {
                     onResetPassword = { newPassword, confirmPassword ->
                         resetPassword(newPassword, confirmPassword)
                     },
-                    currentStep = currentStep
+                    currentStep = currentStep,
+                    isLoadingNext = isLoadingNext,
+                    isLoadingVerify = isLoadingVerify,
+                    isLoadingReset = isLoadingReset
                 )
             }
         }
@@ -171,10 +178,12 @@ class ResetPasswordActivity : ComponentActivity() {
             return
         }
 
+        isLoadingNext = true
         val normalizedEmail = email.trim().lowercase()
         firestore.collection("users").whereEqualTo("email", normalizedEmail).get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.isEmpty) {
+                    isLoadingNext = false
                     Toast.makeText(
                         context,
                         "Email not found. Please check your email or register first.",
@@ -185,6 +194,7 @@ class ResetPasswordActivity : ComponentActivity() {
                     sendOtp(normalizedEmail)
                 }
             }.addOnFailureListener { e ->
+                isLoadingNext = false
                 Toast.makeText(
                     context, "Error checking email: ${e.localizedMessage}", Toast.LENGTH_LONG
                 ).show()
@@ -192,7 +202,7 @@ class ResetPasswordActivity : ComponentActivity() {
     }
 
     private fun sendOtp(email: String) {
-        val LOCAL_HOST_IP = "192.168.1.6"
+        val LOCAL_HOST_IP = "192.168.1.22"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -204,6 +214,7 @@ class ResetPasswordActivity : ComponentActivity() {
 
                 val response = client.newCall(request).execute()
                 withContext(Dispatchers.Main) {
+                    isLoadingNext = false
                     if (response.isSuccessful) {
                         Toast.makeText(context, "OTP sent to $email", Toast.LENGTH_SHORT).show()
                         currentStep = 2
@@ -216,6 +227,7 @@ class ResetPasswordActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    isLoadingNext = false
                     Toast.makeText(
                         context, "Error sending OTP: ${e.localizedMessage}", Toast.LENGTH_LONG
                     ).show()
@@ -225,7 +237,8 @@ class ResetPasswordActivity : ComponentActivity() {
     }
 
     private fun verifyOtp(enteredOtp: String) {
-        val LOCAL_HOST_IP = "192.168.1.6"
+        isLoadingVerify = true
+        val LOCAL_HOST_IP = "192.168.1.22"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -240,6 +253,7 @@ class ResetPasswordActivity : ComponentActivity() {
 
                 val response = client.newCall(request).execute()
                 withContext(Dispatchers.Main) {
+                    isLoadingVerify = false
                     if (response.isSuccessful) {
                         Toast.makeText(context, "OTP Verified", Toast.LENGTH_SHORT).show()
                         resetOtp = enteredOtp
@@ -252,6 +266,7 @@ class ResetPasswordActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    isLoadingVerify = false
                     Toast.makeText(
                         context, "Error verifying OTP: ${e.localizedMessage}", Toast.LENGTH_LONG
                     ).show()
@@ -276,7 +291,9 @@ class ResetPasswordActivity : ComponentActivity() {
             return
         }
 
-        val LOCAL_HOST_IP = "192.168.1.6"
+        isLoadingReset = true
+
+        val LOCAL_HOST_IP = "192.168.1.22"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -299,6 +316,7 @@ class ResetPasswordActivity : ComponentActivity() {
                 Log.d("ResetPassword", "Response: $responseBody")
 
                 withContext(Dispatchers.Main) {
+                    isLoadingReset = false
                     if (response.isSuccessful) {
                         val message = if (responseBody.trim().startsWith("{")) {
                             try {
@@ -336,6 +354,7 @@ class ResetPasswordActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    isLoadingReset = false
                     Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG)
                         .show()
                 }
@@ -357,7 +376,10 @@ fun ResetPasswordScreen(
     onSendOtp: (String) -> Unit = {},
     onVerifyOtp: (String) -> Unit = {},
     onResetPassword: (String, String) -> Unit = { _, _ -> },
-    currentStep: Int = 1
+    currentStep: Int = 1,
+    isLoadingNext: Boolean = false,
+    isLoadingVerify: Boolean = false,
+    isLoadingReset: Boolean = false
 ) {
     val textColor = Color.Black
     val gradient = Brush.verticalGradient(
@@ -444,7 +466,7 @@ fun ResetPasswordScreen(
                         value = email, onValueChange = { email = it }, placeholder = "Email"
                     )
                     Spacer(modifier = Modifier.height(24.dp))
-                    YellowButton("Next") {
+                    YellowButton("Next", isLoading = isLoadingNext) {
                         if (email.isNotBlank()) {
                             onSendOtp(email)
                         }
@@ -474,7 +496,8 @@ fun ResetPasswordScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     YellowButton(
-                        text = if (!canResend) "Verify" else "Resend OTP"
+                        text = if (!canResend) "Verify" else "Resend OTP",
+                        isLoading = if (!canResend) isLoadingVerify else isLoadingNext
                     ) {
                         if (!canResend) {
                             if (otp.length == 5) {
@@ -513,7 +536,7 @@ fun ResetPasswordScreen(
                         isPassword = true
                     )
                     Spacer(modifier = Modifier.height(24.dp))
-                    YellowButton("Reset") {
+                    YellowButton("Reset", isLoading = isLoadingReset) {
                         if (newPassword.isNotBlank() && confirmPassword.isNotBlank()) {
                             onResetPassword(newPassword, confirmPassword)
                         }
@@ -578,7 +601,7 @@ fun StyledTextField(
 }
 
 @Composable
-fun YellowButton(text: String, onClick: () -> Unit) {
+fun YellowButton(text: String, isLoading: Boolean = false, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         modifier = Modifier
@@ -589,14 +612,20 @@ fun YellowButton(text: String, onClick: () -> Unit) {
             containerColor = Color(0xFFFACC15), contentColor = Color.Black
         )
     ) {
-        Text(
-            text = text,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = InterFontFamily,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Color.Black, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+            )
+        } else {
+            Text(
+                text = text,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = InterFontFamily,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

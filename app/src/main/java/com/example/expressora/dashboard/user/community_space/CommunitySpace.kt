@@ -9,6 +9,9 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.example.expressora.auth.LoginActivity
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -115,6 +118,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.example.expressora.R
 import com.example.expressora.components.top_nav.TopNav
+import com.example.expressora.components.top_nav.rememberNotificationCount
 import com.example.expressora.components.user_bottom_nav.BottomNav
 import com.example.expressora.components.user_top_nav2.TopTabNav2
 import com.example.expressora.dashboard.user.learn.LearnActivity
@@ -188,17 +192,69 @@ fun getTimeAgo(time: Long): String {
 private fun nextPostId(posts: List<Post>): Int = (posts.maxOfOrNull { it.id } ?: 0) + 1
 private fun nextCommentId(post: Post): Int = (post.comments.maxOfOrNull { it.id } ?: 0) + 1
 
+// Helper function to validate user exists in Firestore with correct role
+fun ComponentActivity.validateUserAndRole(requiredRole: String, callback: (Boolean) -> Unit) {
+    val sharedPref = getSharedPreferences("user_session", Context.MODE_PRIVATE)
+    val userEmail = sharedPref.getString("user_email", null)
+    
+    if (userEmail == null) {
+        callback(false)
+        return
+    }
+    
+    val firestore = FirebaseFirestore.getInstance()
+    firestore.collection("users")
+        .whereEqualTo("email", userEmail)
+        .whereEqualTo("role", requiredRole)
+        .get()
+        .addOnSuccessListener { snapshot ->
+            callback(!snapshot.isEmpty)
+        }
+        .addOnFailureListener {
+            callback(false)
+        }
+}
+
+// Helper function to perform logout
+fun performLogout(context: Context) {
+    FirebaseAuth.getInstance().signOut()
+    FirebaseFirestore.getInstance().clearPersistence()
+
+    val sharedPref = context.getSharedPreferences("user_session", Context.MODE_PRIVATE)
+    with(sharedPref.edit()) {
+        clear()
+        apply()
+    }
+
+    val intent = Intent(context, LoginActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    }
+    context.startActivity(intent)
+}
+
 class CommunitySpaceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            val customSelectionColors = TextSelectionColors(
-                handleColor = Color(0xFFFACC15),
-                backgroundColor = Color(0x33FACC15)
-            )
+        
+        // Validate user exists in Firestore with user role
+        validateUserAndRole("user") { isValid ->
+            if (!isValid) {
+                // User doesn't exist or wrong role, logout and redirect to login
+                performLogout(this)
+                finish()
+                return@validateUserAndRole
+            }
+            
+            // User is valid, show the screen
+            setContent {
+                val customSelectionColors = TextSelectionColors(
+                    handleColor = Color(0xFFFACC15),
+                    backgroundColor = Color(0x33FACC15)
+                )
 
-            CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
-                CommunitySpaceScreen()
+                CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
+                    CommunitySpaceScreen()
+                }
             }
         }
     }
@@ -209,6 +265,12 @@ class CommunitySpaceActivity : ComponentActivity() {
 fun CommunitySpaceScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val sharedPref = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
+    val userEmail = remember { sharedPref.getString("user_email", "") ?: "" }
+    val userRole = remember { sharedPref.getString("user_role", "user") ?: "user" }
+    
+    // Dynamic notification count from Firebase
+    val notificationCount = rememberNotificationCount(userEmail, userRole)
 
     val currentUserName = remember { "Jennie Kim" }
 
@@ -354,7 +416,7 @@ fun CommunitySpaceScreen() {
 
     Scaffold(topBar = {
         Column {
-            TopNav(notificationCount = 2, onProfileClick = {
+            TopNav(notificationCount = notificationCount, onProfileClick = {
                 context.startActivity(Intent(context, SettingsActivity::class.java))
             }, onTranslateClick = { { /* already in community space */ } }, onNotificationClick = {
                 context.startActivity(Intent(context, NotificationActivity::class.java))

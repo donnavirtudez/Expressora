@@ -42,6 +42,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -74,6 +75,14 @@ import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
+import com.example.expressora.backend.NotificationRepository
+import com.example.expressora.models.Notification as FirebaseNotification
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class NotificationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,11 +102,62 @@ data class NotificationItem(
     val isRead: Boolean = false
 )
 
+// Helper function to get userId from email and role
+suspend fun getUserIdFromEmail(email: String, role: String): String? {
+    return try {
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val snapshot = firestore.collection("users")
+            .whereEqualTo("email", email)
+            .whereEqualTo("role", role)
+            .get()
+            .await()
+        if (!snapshot.isEmpty) {
+            snapshot.documents[0].id
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+// Helper function to format time
+fun formatTimeAgo(date: java.util.Date?): String {
+    if (date == null) return "Just now"
+    val now = System.currentTimeMillis()
+    val time = date.time
+    val diff = now - time
+    
+    return when {
+        diff < TimeUnit.MINUTES.toMillis(1) -> "Just now"
+        diff < TimeUnit.HOURS.toMillis(1) -> {
+            val minutes = TimeUnit.MILLISECONDS.toMinutes(diff).toInt()
+            "$minutes min${if (minutes > 1) "s" else ""} ago"
+        }
+        diff < TimeUnit.DAYS.toMillis(1) -> {
+            val hours = TimeUnit.MILLISECONDS.toHours(diff).toInt()
+            "$hours hr${if (hours > 1) "s" else ""} ago"
+        }
+        diff < TimeUnit.DAYS.toMillis(7) -> {
+            val days = TimeUnit.MILLISECONDS.toDays(diff).toInt()
+            "$days day${if (days > 1) "s" else ""} ago"
+        }
+        else -> {
+            val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+            sdf.format(date)
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val notificationRepository = remember { NotificationRepository() }
+    val sharedPref = remember { context.getSharedPreferences("user_session", android.content.Context.MODE_PRIVATE) }
+    val userEmail = remember { sharedPref.getString("user_email", "") ?: "" }
+    val userRole = remember { sharedPref.getString("user_role", "user") ?: "user" }
 
     val bgColor = Color(0xFFF8F8F8)
     val cardColorUnread = Color(0xFFFFF4C2)
@@ -105,46 +165,142 @@ fun NotificationScreen() {
     val textColor = Color.Black
     val subtitleColor = Color(0xFF666666)
 
-    val notifications = remember {
-        mutableStateListOf(
-            NotificationItem(
-                1,
-                "Hyein Lee replied to your post",
-                "Comeback when?",
-                "2h ago",
-                R.drawable.sample_profile2
-            ),
-            NotificationItem(2, "Achievement", "You completed 10 lessons!", "3d ago"),
-        )
-    }
+    val notifications = remember { mutableStateListOf<NotificationItem>() }
+    var isLoading by remember { mutableStateOf(true) }
+    // Map to track Firebase notification IDs (String) for each NotificationItem (Int id)
+    val firebaseIdMap = remember { mutableStateMapOf<Int, String>() }
 
     val visibilityStates = remember {
-        mutableStateMapOf<Int, MutableTransitionState<Boolean>>().apply {
-            notifications.forEach { notif ->
-                this[notif.id] = MutableTransitionState(true)
-            }
-        }
+        mutableStateMapOf<Int, MutableTransitionState<Boolean>>()
     }
 
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
     val listState = rememberLazyListState()
 
+    // Load notifications from Firebase
+    fun loadNotifications() {
+        scope.launch {
+            isLoading = true
+            withContext(Dispatchers.IO) {
+                try {
+                    val userId = getUserIdFromEmail(userEmail, userRole)
+                    if (userId != null) {
+                        android.util.Log.d("NotificationScreen", "Loading notifications for userId: $userId")
+                        val result = notificationRepository.getUserNotifications(userId)
+                        result.onSuccess { firebaseNotifications ->
+                            android.util.Log.d("NotificationScreen", "Loaded ${firebaseNotifications.size} notifications")
+                            withContext(Dispatchers.Main) {
+                                notifications.clear()
+                                visibilityStates.clear()
+                                firebaseIdMap.clear()
+                                firebaseNotifications.forEach { firebaseNotif ->
+                                    val itemId = firebaseNotif.id.hashCode() // Convert String ID to Int for compatibility
+                                    val notificationItem = NotificationItem(
+                                        id = itemId,
+                                        title = firebaseNotif.title,
+                                        message = firebaseNotif.message,
+                                        time = formatTimeAgo(firebaseNotif.createdAt),
+                                        iconRes = null,
+                                        isRead = firebaseNotif.isRead
+                                    )
+                                    notifications.add(notificationItem)
+                                    firebaseIdMap[itemId] = firebaseNotif.id // Map Int id to Firebase String id
+                                    visibilityStates[itemId] = MutableTransitionState(true)
+                                }
+                                isLoading = false
+                            }
+                        }.onFailure { e ->
+                            android.util.Log.e("NotificationScreen", "Failed to load notifications: ${e.message}", e)
+                            withContext(Dispatchers.Main) {
+                                isLoading = false
+                            }
+                        }
+                    } else {
+                        android.util.Log.w("NotificationScreen", "userId is null for email: $userEmail, role: $userRole")
+                        withContext(Dispatchers.Main) {
+                            isLoading = false
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("NotificationScreen", "Exception loading notifications: ${e.message}", e)
+                    withContext(Dispatchers.Main) {
+                        isLoading = false
+                    }
+                }
+            }
+        }
+    }
+
+    // Load notifications on first launch
+    LaunchedEffect(Unit) {
+        loadNotifications()
+    }
+    
+    // Refresh notifications when user returns to this screen
+    var refreshKey by remember { mutableStateOf(0) }
+    LaunchedEffect(refreshKey) {
+        if (refreshKey > 0) {
+            loadNotifications()
+        }
+    }
+    
+    // Periodic refresh every 5 seconds when screen is visible
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(5000) // Refresh every 5 seconds
+            loadNotifications()
+        }
+    }
+    
+    // Trigger refresh when screen is disposed (user navigated away)
+    DisposableEffect(Unit) {
+        onDispose {
+            // Increment refresh key so next time screen is shown, it refreshes
+            refreshKey++
+        }
+    }
+
     fun fetchNewNotifications() {
         scope.launch {
             isRefreshing = true
-            delay(1500)
-            val newId = (notifications.maxOfOrNull { it.id } ?: 0) + 1
-            val newNotif = NotificationItem(
-                id = newId,
-                title = "New Notification #$newId",
-                message = "This is a fresh notification.",
-                time = "Just now"
-            )
-            notifications.add(0, newNotif)
-            visibilityStates[newId] = MutableTransitionState(true)
-            isRefreshing = false
-            listState.scrollToItem(0)
+            withContext(Dispatchers.IO) {
+                val userId = getUserIdFromEmail(userEmail, userRole)
+                if (userId != null) {
+                    val result = notificationRepository.getUserNotifications(userId)
+                    result.onSuccess { firebaseNotifications ->
+                        withContext(Dispatchers.Main) {
+                            notifications.clear()
+                            visibilityStates.clear()
+                            firebaseIdMap.clear()
+                            firebaseNotifications.forEach { firebaseNotif ->
+                                val itemId = firebaseNotif.id.hashCode() // Convert String ID to Int for compatibility
+                                val notificationItem = NotificationItem(
+                                    id = itemId,
+                                    title = firebaseNotif.title,
+                                    message = firebaseNotif.message,
+                                    time = formatTimeAgo(firebaseNotif.createdAt),
+                                    iconRes = null,
+                                    isRead = firebaseNotif.isRead
+                                )
+                                notifications.add(notificationItem)
+                                firebaseIdMap[itemId] = firebaseNotif.id // Map Int id to Firebase String id
+                                visibilityStates[itemId] = MutableTransitionState(true)
+                            }
+                            isRefreshing = false
+                            listState.scrollToItem(0)
+                        }
+                    }.onFailure {
+                        withContext(Dispatchers.Main) {
+                            isRefreshing = false
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        isRefreshing = false
+                    }
+                }
+            }
         }
     }
 
@@ -206,6 +362,12 @@ fun NotificationScreen() {
                             .clip(CircleShape)
                             .clickable {
                                 scope.launch {
+                                    // Delete all from Firebase
+                                    withContext(Dispatchers.IO) {
+                                        firebaseIdMap.values.forEach { firebaseId ->
+                                            notificationRepository.deleteNotification(firebaseId)
+                                        }
+                                    }
                                     notifications.forEach {
                                         visibilityStates[it.id]?.targetState = false
                                         delay(100)
@@ -213,6 +375,7 @@ fun NotificationScreen() {
                                     delay(400)
                                     notifications.clear()
                                     visibilityStates.clear()
+                                    firebaseIdMap.clear()
                                 }
                             }
                             .padding(horizontal = 4.dp, vertical = 2.dp)) {
@@ -241,7 +404,7 @@ fun NotificationScreen() {
                         scale = true
                     )
                 }) {
-                if (notifications.isEmpty()) {
+                if (notifications.isEmpty() && !isLoading) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -261,11 +424,17 @@ fun NotificationScreen() {
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             top = 8.dp, bottom = 16.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        )
                     ) {
+                        // Filter out items that are animating out or fully removed to prevent gaps
+                        val visibleNotifications = notifications.filter { notif ->
+                            val visibleState = visibilityStates[notif.id]
+                            // Only show items that are currently visible and not animating out
+                            visibleState?.currentState == true && visibleState?.targetState == true
+                        }
+                        
                         itemsIndexed(
-                            items = notifications.toList(),
+                            items = visibleNotifications,
                             key = { _, item -> item.id }) { _, notif ->
                             val visibleState = visibilityStates.getOrPut(notif.id) {
                                 MutableTransitionState(true)
@@ -275,29 +444,33 @@ fun NotificationScreen() {
                                 initialValue = SwipeToDismissBoxValue.Settled,
                                 confirmValueChange = { value ->
                                     if (value == SwipeToDismissBoxValue.EndToStart) {
-                                        visibleState.targetState = false
+                                        // Immediately remove from list to prevent spacing issues
+                                        val firebaseId = firebaseIdMap[notif.id]
+                                        if (firebaseId != null) {
+                                            scope.launch(Dispatchers.IO) {
+                                                notificationRepository.deleteNotification(firebaseId)
+                                            }
+                                        }
+                                        // Remove from lists immediately
+                                        notifications.remove(notif)
+                                        visibilityStates.remove(notif.id)
+                                        firebaseIdMap.remove(notif.id)
                                         true
                                     } else false
                                 })
 
-                            if (!visibleState.currentState && !visibleState.targetState) {
-                                LaunchedEffect(Unit) {
-                                    delay(300)
-                                    notifications.remove(notif)
-                                    visibilityStates.remove(notif.id)
-                                }
-                            }
-
-                            SwipeToDismissBox(
-                                state = swipeState,
-                                enableDismissFromEndToStart = true,
-                                enableDismissFromStartToEnd = false,
-                                backgroundContent = {}) {
-                                AnimatedVisibility(
-                                    visibleState = visibleState,
-                                    enter = fadeIn(tween(300)) + expandVertically(),
-                                    exit = fadeOut(tween(300)) + shrinkVertically(tween(300))
-                                ) {
+                            // Add spacing using padding instead of Arrangement.spacedBy
+                            // This prevents gaps when items are removed
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                SwipeToDismissBox(
+                                    state = swipeState,
+                                    enableDismissFromEndToStart = true,
+                                    enableDismissFromStartToEnd = false,
+                                    backgroundContent = {}) {
                                     NotificationCard(
                                         item = notif,
                                         unreadBackground = cardColorUnread,
@@ -310,6 +483,13 @@ fun NotificationScreen() {
                                             if (idx != -1 && !notifications[idx].isRead) {
                                                 notifications[idx] =
                                                     notifications[idx].copy(isRead = true)
+                                                // Mark as read in Firebase
+                                                val firebaseId = firebaseIdMap[notif.id]
+                                                if (firebaseId != null) {
+                                                    scope.launch(Dispatchers.IO) {
+                                                        notificationRepository.markAsRead(firebaseId)
+                                                    }
+                                                }
                                             }
                                         })
                                 }
