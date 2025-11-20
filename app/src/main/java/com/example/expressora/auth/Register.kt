@@ -73,6 +73,9 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -349,7 +352,7 @@ class RegisterActivity : ComponentActivity() {
             .addOnSuccessListener { authResult ->
                 val uid = authResult.user?.uid
                 if (uid != null) {
-                    val user = hashMapOf(
+                    val user = hashMapOf<String, Any>(
                         "email" to otpEmail,
                         "password" to hashedPassword,
                         "firstName" to "",
@@ -357,7 +360,7 @@ class RegisterActivity : ComponentActivity() {
                         "profile" to "",
                         "role" to "user",
                         "userId" to uid,
-                        "createdAt" to Date()
+                        "createdAt" to FieldValue.serverTimestamp()
                     )
                     firestore.collection("users").document(uid).set(user).addOnSuccessListener {
                         Toast.makeText(context, "Registration successful", Toast.LENGTH_SHORT)
@@ -397,7 +400,7 @@ class RegisterActivity : ComponentActivity() {
                                                     .digest(otpPassword.toByteArray())
                                                     .joinToString("") { "%02x".format(it) }
 
-                                            val user = hashMapOf(
+                                            val user = hashMapOf<String, Any>(
                                                 "email" to otpEmail,
                                                 "password" to hashedPassword,
                                                 "firstName" to "",
@@ -405,7 +408,7 @@ class RegisterActivity : ComponentActivity() {
                                                 "profile" to "",
                                                 "role" to "user",
                                                 "userId" to uid,
-                                                "createdAt" to Date()
+                                                "createdAt" to FieldValue.serverTimestamp()
                                             )
                                             firestore.collection("users").document(uid).set(user)
                                                 .addOnSuccessListener {
@@ -451,99 +454,229 @@ class RegisterActivity : ComponentActivity() {
 
 
     private fun signInWithGoogle() {
-        val signInIntent = googleSignInClient.signInIntent
-        startActivityForResult(signInIntent, GOOGLE_SIGN_IN_REQUEST)
+        // Sign out first to show account picker every time
+        googleSignInClient.signOut().addOnCompleteListener {
+            val signInIntent = googleSignInClient.signInIntent
+            startActivityForResult(signInIntent, GOOGLE_SIGN_IN_REQUEST)
+        }
     }
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == GOOGLE_SIGN_IN_REQUEST) {
+            // Check if user cancelled (pressed back)
+            if (resultCode == RESULT_CANCELED) {
+                // User cancelled - don't show error, just return silently
+                println("User cancelled Google Sign-In")
+                return
+            }
+            
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             try {
                 val account = task.getResult(ApiException::class.java)
-                account?.idToken
-                val email = account?.email ?: return
-                val name = account.displayName ?: "User"
-
-                handlePostGoogleSignIn(email, name)
-
-            } catch (e: ApiException) {
-                Toast.makeText(context, "Google Sign-In failed: ${e.message}", Toast.LENGTH_LONG)
-                    .show()
-            }
-        }
-    }
-
-    private fun sendGoogleTokenToBackend(idToken: String, displayName: String, email: String) {
-        val LOCAL_HOST_IP = "192.168.1.22"
-        val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val json = JSONObject().apply { put("token", idToken) }
-                val body = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
-                val request = Request.Builder().url("$baseUrl/google-auth").post(body)
-                    .addHeader("Content-Type", "application/json").build()
-
-                val response = client.newCall(request).execute()
-                withContext(Dispatchers.Main) {
-                    if (response.isSuccessful) {
-                        handlePostGoogleSignIn(email, displayName)
-                    } else {
-                        Toast.makeText(
-                            context,
-                            "Backend verification failed, proceeding with local sign-in.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        handlePostGoogleSignIn(email, displayName)
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
+                val idToken = account?.idToken
+                
+                if (idToken != null) {
+                    // Authenticate with Firebase using Google credential
+                    val credential = GoogleAuthProvider.getCredential(idToken, null)
+                    firebaseAuth.signInWithCredential(credential)
+                        .addOnSuccessListener { authResult ->
+                            val user = authResult.user
+                            if (user != null) {
+                                handlePostGoogleSignIn(user)
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            val errorMsg = when {
+                                e.message?.contains("network") == true -> "Network error. Please check your internet connection and try again."
+                                e.message?.contains("invalid") == true -> "Invalid credentials. Please try again."
+                                else -> "Unable to sign in with Google. Please try again later."
+                            }
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                        }
+                } else {
                     Toast.makeText(
                         context,
-                        "Backend not available, proceeding with local sign-in.",
-                        Toast.LENGTH_SHORT
+                        "Unable to get Google account information. Please try again.",
+                        Toast.LENGTH_LONG
                     ).show()
-                    handlePostGoogleSignIn(email, displayName)
+                }
+            } catch (e: ApiException) {
+                val errorCode = e.statusCode
+                val errorMessage = when (errorCode) {
+                    12500 -> {
+                        System.err.println("❌ Google Sign-In Error 12500 (DEVELOPER_ERROR)")
+                        System.err.println("Common causes:")
+                        System.err.println("1. SHA-1 fingerprint not registered in Firebase Console")
+                        System.err.println("2. OAuth Client ID mismatch")
+                        System.err.println("3. Package name mismatch")
+                        System.err.println("4. OAuth consent screen not configured")
+                        "Google Sign-In configuration error. Please contact support."
+                    }
+                    12501 -> {
+                        // User cancelled - don't show error
+                        println("User cancelled Google Sign-In (12501)")
+                        return // Silent return, no toast
+                    }
+                    10 -> "Google Sign-In configuration error. Please contact support."
+                    7 -> "Network error. Please check your internet connection and try again."
+                    8 -> "Google Sign-In service error. Please try again later."
+                    else -> "Unable to sign in with Google. Please try again. (Error: $errorCode)"
+                }
+                
+                // Only show error if not cancelled
+                if (errorCode != 12501) {
+                    System.err.println("❌ Google Sign-In Failed")
+                    System.err.println("Error Code: $errorCode")
+                    System.err.println("Error Message: ${e.message}")
+                    Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
 
-    private fun handlePostGoogleSignIn(email: String, name: String) {
-        firestore.collection("users").whereEqualTo("email", email).get()
-            .addOnSuccessListener { snapshot ->
-                if (snapshot.isEmpty) {
-                    val randomPassword = "google_${System.currentTimeMillis()}"
-                    firebaseAuth.createUserWithEmailAndPassword(email, randomPassword)
-                        .addOnSuccessListener { authResult ->
-                            val uid = authResult.user?.uid
-                            if (uid != null) {
-                                val user = hashMapOf(
+
+    private fun handlePostGoogleSignIn(user: FirebaseUser) {
+        val email = user.email ?: return
+        val name = user.displayName ?: "User"
+        val uid = user.uid
+        
+        println("=== Google Sign-Up Started ===")
+        println("Email: $email")
+        println("Name: $name")
+        println("UID: $uid")
+        
+        // Check if email already exists in users collection (by email, not UID)
+        // This is for Sign-Up screen - if user already exists, they should log in instead
+        firestore.collection("users")
+            .whereEqualTo("email", email)
+            .get()
+            .addOnSuccessListener { emailSnapshot ->
+                if (!emailSnapshot.isEmpty) {
+                    // Email already exists in users collection - user should log in instead
+                    println("ERROR: Email $email already exists in users collection")
+                    println("Found ${emailSnapshot.documents.size} existing user(s) with this email")
+                    System.err.println("❌ Google Sign-Up Failed: Account already exists. Please log in instead.")
+                    
+                    Toast.makeText(
+                        context,
+                        "Account already exists. Please log in instead.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    
+                    // Sign out from Firebase Auth
+                    firebaseAuth.signOut()
+                    
+                    // Redirect to Login screen
+                    val intent = Intent(this, LoginActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    startActivity(intent)
+                    finish()
+                } else {
+                    // Email doesn't exist - safe to create new account
+                    println("Email does not exist. Creating new user account...")
+                    
+                    // Check if UID already exists (just in case)
+                    firestore.collection("users").document(uid).get()
+                        .addOnSuccessListener { doc ->
+                            if (doc.exists()) {
+                                // UID exists but email doesn't match - this shouldn't happen, but handle it
+                                println("WARNING: UID exists but email doesn't match")
+                                val existingEmail = doc.getString("email") ?: "unknown"
+                                System.err.println("❌ UID conflict: UID $uid exists with email $existingEmail")
+                                
+                                Toast.makeText(
+                                    context,
+                                    "Account conflict detected. Please contact support.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                
+                                firebaseAuth.signOut()
+                            } else {
+                                // New user - create Firestore document
+                                val newUserRole = "user" // Google Sign-Up always creates "user" role
+                                val profileUrl = user.photoUrl?.toString() ?: ""
+                                
+                                val userData = hashMapOf<String, Any>(
                                     "email" to email,
-                                    "password" to randomPassword.hashCode().toString(),
+                                    "password" to "", // Google users don't have password
                                     "firstName" to "",
                                     "lastName" to "",
-                                    "profile" to "",
-                                    "role" to "user",
+                                    "profile" to profileUrl,
+                                    "role" to newUserRole,
                                     "userId" to uid,
-                                    "createdAt" to Date()
+                                    "createdAt" to FieldValue.serverTimestamp(),
+                                    "signInMethod" to "google"
                                 )
-                                firestore.collection("users").document(uid).set(user)
+                                
+                                println("Saving new user data to Firestore...")
+                                firestore.collection("users").document(uid).set(userData)
+                                    .addOnSuccessListener {
+                                        println("✅ User created successfully!")
+                                        println("Email: $email, Role: $newUserRole, UID: $uid")
+                                        println("=== Google Sign-Up Completed Successfully ===")
+                                        
+                                        // Save session
+                                        val sharedPref = getSharedPreferences("user_session", MODE_PRIVATE)
+                                        with(sharedPref.edit()) {
+                                            putString("user_email", email)
+                                            putString("user_role", newUserRole)
+                                            apply()
+                                        }
+                                        
+                                        println("Session saved. Redirecting to dashboard...")
+                                        
+                                        // Redirect to dashboard (automatic sign in)
+                                        val intent = Intent(this, CommunitySpaceActivity::class.java)
+                                        intent.putExtra("USER_NAME", name)
+                                        intent.putExtra("USER_EMAIL", email)
+                                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                        startActivity(intent)
+                                        finish()
+                                    }
+                                    .addOnFailureListener { e ->
+                                        System.err.println("❌ Error saving user data: ${e.message}")
+                                        System.err.println("Stack trace: ${e.stackTraceToString()}")
+                                        
+                                        Toast.makeText(
+                                            context,
+                                            "Error saving user data: ${e.localizedMessage}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        
+                                        // Sign out from Firebase Auth on error
+                                        firebaseAuth.signOut()
+                                    }
                             }
-                        }.addOnFailureListener { e ->
+                        }
+                        .addOnFailureListener { e ->
+                            System.err.println("❌ Error checking UID: ${e.message}")
+                            System.err.println("Stack trace: ${e.stackTraceToString()}")
+                            
+                            Toast.makeText(
+                                context,
+                                "Error checking account: ${e.localizedMessage}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            
+                            // Sign out from Firebase Auth on error
+                            firebaseAuth.signOut()
                         }
                 }
-
-                val intent = Intent(this, CommunitySpaceActivity::class.java)
-                intent.putExtra("USER_NAME", name)
-                intent.putExtra("USER_EMAIL", email)
-                startActivity(intent)
-                finish()
-            }.addOnFailureListener { e ->
-                Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+            .addOnFailureListener { e ->
+                System.err.println("❌ Error checking email: ${e.message}")
+                System.err.println("Stack trace: ${e.stackTraceToString()}")
+                
+                Toast.makeText(
+                    context,
+                    "Error checking account: ${e.localizedMessage}",
+                    Toast.LENGTH_LONG
+                ).show()
+                
+                // Sign out from Firebase Auth on error
+                firebaseAuth.signOut()
             }
     }
 

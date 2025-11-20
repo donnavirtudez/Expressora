@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
@@ -78,6 +79,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.expressora.backend.AIQuizService
 import com.example.expressora.backend.QuizRepository
 import com.example.expressora.components.admin_bottom_nav.BottomNav2
 import com.example.expressora.components.top_nav3.TopNav3
@@ -89,6 +91,9 @@ import android.content.Context
 import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.util.Base64
 import android.webkit.MimeTypeMap
 import kotlinx.coroutines.CoroutineScope
@@ -124,6 +129,54 @@ data class Quiz(
 fun formatDate(time: Long): String {
     val fmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
     return fmt.format(Date(time))
+}
+
+// Helper function to create colored placeholder image with letter based on difficulty level
+fun createDifficultyPlaceholderImage(difficulty: Difficulty): String {
+    // Get difficulty letter (same as QuizCard)
+    val difficultyLetter = when (difficulty) {
+        Difficulty.EASY -> "E"
+        Difficulty.MEDIUM -> "M"
+        Difficulty.DIFFICULT -> "D"
+        Difficulty.PRO -> "P"
+    }
+    
+    // Background color matching QuizCard (yellow shade)
+    val bgColor = 0xFFFDE58A.toInt()
+    
+    // Create a 100x100 pixel bitmap
+    val width = 100
+    val height = 100
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    
+    // Fill background with yellow color
+    canvas.drawColor(bgColor)
+    
+    // Draw letter in black, bold
+    val paint = Paint().apply {
+        color = android.graphics.Color.BLACK
+        textSize = 40f // Scaled for 100x100 image (20sp * 2 = 40px)
+        isAntiAlias = true
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+    }
+    
+    // Calculate text position (centered)
+    val x = width / 2f
+    val y = height / 2f - ((paint.descent() + paint.ascent()) / 2f)
+    
+    // Draw the letter
+    canvas.drawText(difficultyLetter, x, y, paint)
+    
+    // Convert bitmap to base64
+    val outputStream = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+    val imageBytes = outputStream.toByteArray()
+    val base64String = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+    
+    return "data:image/png;base64,$base64String"
 }
 
 private val AppBackground = Color(0xFFF8F8F8)
@@ -595,6 +648,12 @@ fun ManageQuizScreen(
     val questionsCount = remember(quiz.questions.size) { mutableStateOf(quiz.questions.size) }
     val isLoading = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    
+    // AI generation state
+    val showAIGenerationDialog = remember { mutableStateOf(false) }
+    val aiGenerationCount = remember { mutableStateOf("5") }
+    val isGeneratingAI = remember { mutableStateOf(false) }
+    val aiQuizService = remember { AIQuizService() }
 
     Column(
         modifier = Modifier
@@ -610,6 +669,28 @@ fun ManageQuizScreen(
                 fontFamily = InterFontFamily
             )
             Spacer(modifier = Modifier.weight(1f))
+            
+            // AI Generate Questions Button
+            val remainingSlots = 10 - quiz.questions.size
+            val canGenerate = remainingSlots > 0
+            IconButton(
+                onClick = {
+                    if (canGenerate) {
+                        showAIGenerationDialog.value = true
+                    } else {
+                        Toast.makeText(context, "Maximum 10 questions reached", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                enabled = canGenerate
+            ) {
+                Icon(
+                    Icons.Default.AutoAwesome,
+                    contentDescription = "AI Generate Questions",
+                    tint = if (canGenerate) Color(0xFFFACC15) else Color.Gray
+                )
+            }
+            
+            // Manual Add Question Button
             IconButton(
                 onClick = {
                     if (quiz.questions.size < 10) navController.navigate("addQuestion/${quiz.id}")
@@ -685,6 +766,234 @@ fun ManageQuizScreen(
         }
     }
 
+    // AI Generation Dialog
+    if (showAIGenerationDialog.value) {
+        Dialog(onDismissRequest = { 
+            if (!isGeneratingAI.value) {
+                showAIGenerationDialog.value = false 
+            }
+        }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 8.dp,
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "AI Generate Questions",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Generate quiz questions automatically using AI. Questions will be created based on the ${quiz.difficulty.name.lowercase()} difficulty level.\n\nQuestions are about identifying sign language from images - users will see sign language pictures and identify what the sign means or what sign language it is (e.g., \"What does this sign mean?\" - showing a 'thank you' sign).\n\nQuestions cover ASL and FSL signs like \"thank you\", \"hello\", \"goodbye\", \"yes\", \"no\", \"please\", \"sorry\", \"love\", \"family\", etc.\n\nNote: Generated questions will have placeholder images. You can edit each question later to add actual sign language images.",
+                        color = MutedText
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    val remainingSlots = 10 - quiz.questions.size
+                    OutlinedTextField(
+                        value = aiGenerationCount.value,
+                        onValueChange = { newValue ->
+                            val num = newValue.toIntOrNull()
+                            if (num != null && num > 0 && num <= remainingSlots) {
+                                aiGenerationCount.value = newValue
+                            } else if (newValue.isEmpty()) {
+                                aiGenerationCount.value = ""
+                            }
+                        },
+                        label = {
+                            Text("Number of Questions (1-$remainingSlots)", fontFamily = InterFontFamily, color = Color(0xFF666666))
+                        },
+                        enabled = !isGeneratingAI.value,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            cursorColor = Color.Black,
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color(0xFF666666),
+                            focusedBorderColor = Color.Black,
+                            unfocusedBorderColor = Color(0xFF666666)
+                        ),
+                        supportingText = {
+                            Text(
+                                "Maximum $remainingSlots questions can be generated",
+                                fontFamily = InterFontFamily,
+                                color = Color(0xFF666666)
+                            )
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    if (isGeneratingAI.value) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFFFACC15)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Generating questions...",
+                                fontFamily = InterFontFamily,
+                                color = MutedText
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { showAIGenerationDialog.value = false },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)
+                            ) { 
+                                Text("Cancel", color = Color(0xFF666666)) 
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val count = aiGenerationCount.value.toIntOrNull() ?: return@Button
+                                    if (count <= 0 || count > remainingSlots) {
+                                        Toast.makeText(context, "Please enter a valid number between 1 and $remainingSlots", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    
+                                    isGeneratingAI.value = true
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            val result = aiQuizService.generateQuizQuestions(
+                                                difficulty = quiz.difficulty.name,
+                                                count = count
+                                            )
+                                            
+                                            withContext(Dispatchers.Main) {
+                                                isGeneratingAI.value = false
+                                                showAIGenerationDialog.value = false
+                                                
+                                                result.onSuccess { aiResponse ->
+                                                    if (aiResponse.success && aiResponse.questions != null) {
+                                                        var addedCount = 0
+                                                        aiResponse.questions.forEach { generatedQuestion ->
+                                                            if (quiz.questions.size < 10) {
+                                                                // Create a colored placeholder image based on difficulty level
+                                                                val placeholderImageBase64 = createDifficultyPlaceholderImage(quiz.difficulty)
+                                                                val placeholderImageUri = android.net.Uri.parse(placeholderImageBase64)
+                                                                
+                                                                val newQuestion = Question(
+                                                                    text = generatedQuestion.question,
+                                                                    correctAnswer = generatedQuestion.correctAnswer,
+                                                                    wrongOptions = generatedQuestion.wrongOptions.toMutableList(),
+                                                                    imageUri = placeholderImageUri
+                                                                )
+                                                                
+                                                                quiz.questions.add(newQuestion)
+                                                                addedCount++
+                                                            }
+                                                        }
+                                                        
+                                                        if (addedCount > 0) {
+                                                            questionsCount.value = quiz.questions.size
+                                                            if (quiz.id.length > 20) {
+                                                                quiz.lastUpdated = System.currentTimeMillis()
+                                                            }
+                                                            
+                                                            // Show loading indicator while saving
+                                                            isLoading.value = true
+                                                            
+                                                            // Save to Firebase
+                                                            scope.launch(Dispatchers.IO) {
+                                                                val saveResult = quizRepository.saveQuiz(quiz, adminEmail)
+                                                                withContext(Dispatchers.Main) {
+                                                                    isLoading.value = false
+                                                                    
+                                                                    saveResult.onSuccess {
+                                                                        // Reload quiz from Firebase to get updated data
+                                                                        scope.launch(Dispatchers.IO) {
+                                                                            val reloadResult = quizRepository.getQuizByDifficulty(quiz.difficulty)
+                                                                            withContext(Dispatchers.Main) {
+                                                                                if (reloadResult.isSuccess) {
+                                                                                    val reloadedQuiz = reloadResult.getOrNull()
+                                                                                    if (reloadedQuiz != null) {
+                                                                                        // Update quiz with fresh data from Firebase
+                                                                                        quiz.questions.clear()
+                                                                                        quiz.questions.addAll(reloadedQuiz.questions)
+                                                                                        questionsCount.value = quiz.questions.size
+                                                                                        quiz.lastUpdated = reloadedQuiz.lastUpdated
+                                                                                    }
+                                                                                }
+                                                                                onQuizUpdated(quiz)
+                                                                                Toast.makeText(
+                                                                                    context,
+                                                                                    "Successfully generated and added $addedCount question(s)!",
+                                                                                    Toast.LENGTH_SHORT
+                                                                                ).show()
+                                                                            }
+                                                                        }
+                                                                    }.onFailure { e ->
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Questions added but failed to save: ${e.message}",
+                                                                            Toast.LENGTH_SHORT
+                                                                        ).show()
+                                                                    }
+                                                                }
+                                                            }
+                                                        } else {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Cannot add more questions. Maximum 10 questions reached.",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        }
+                                                    } else {
+                                                        Toast.makeText(
+                                                            context,
+                                                            aiResponse.message ?: "Failed to generate questions",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                }.onFailure { e ->
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Error generating questions: ${e.message}",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            withContext(Dispatchers.Main) {
+                                                isGeneratingAI.value = false
+                                                showAIGenerationDialog.value = false
+                                                Toast.makeText(
+                                                    context,
+                                                    "Error: ${e.localizedMessage}",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFFACC15),
+                                    contentColor = Color.Black
+                                )
+                            ) { 
+                                Text("Generate") 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     if (deleteDialog.value.first) {
         ConfirmStyledDialog(
             title = "Delete Question",

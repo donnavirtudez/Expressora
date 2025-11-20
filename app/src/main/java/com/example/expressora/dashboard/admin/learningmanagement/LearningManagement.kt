@@ -43,6 +43,7 @@ import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -111,8 +112,10 @@ import com.example.expressora.dashboard.admin.communityspacemanagement.Community
 import com.example.expressora.dashboard.admin.quizmanagement.QuizManagementActivity
 import com.example.expressora.ui.theme.InterFontFamily
 import com.example.expressora.backend.LessonRepository
+import com.example.expressora.backend.AILessonService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -534,6 +537,11 @@ fun LessonListScreen(
     onDeleteLesson: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val aiLessonService = remember { AILessonService() }
+    val lessonRepository = remember { LessonRepository() }
+    val sharedPref = remember { context.getSharedPreferences("user_session", android.content.Context.MODE_PRIVATE) }
+    val adminEmail = remember { sharedPref.getString("user_email", "") ?: "" }
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var sortExpanded by remember { mutableStateOf(false) }
@@ -543,6 +551,12 @@ fun LessonListScreen(
     val isLoading = remember { mutableStateOf(false) }
     val allSortOptions = listOf("Latest", "Oldest")
     val sortOptions = remember { mutableStateListOf(*allSortOptions.toTypedArray()) }
+    
+    // AI Generation Dialog State
+    val showAIGenerationDialog = remember { mutableStateOf(false) }
+    val aiTopicInput = remember { mutableStateOf("") }
+    val aiCountInput = remember { mutableStateOf("1") }
+    val isGeneratingAI = remember { mutableStateOf(false) }
     
     // Hide loading indicator when lessons list changes (after delete completes)
     LaunchedEffect(lessons.size) {
@@ -573,6 +587,15 @@ fun LessonListScreen(
                 fontFamily = InterFontFamily
             )
             Spacer(modifier = Modifier.weight(1f))
+            // AI Generate Lesson Button
+            IconButton(onClick = { showAIGenerationDialog.value = true }) {
+                Icon(
+                    Icons.Default.AutoAwesome,
+                    contentDescription = "AI Generate Lesson",
+                    tint = Accent
+                )
+            }
+            // Manual Add Lesson Button
             IconButton(onClick = onAddLesson) {
                 Icon(Icons.Default.Add, contentDescription = "Add Lesson")
             }
@@ -724,6 +747,235 @@ fun LessonListScreen(
         }
     }
 
+
+    // AI Generation Dialog
+    if (showAIGenerationDialog.value) {
+        Dialog(onDismissRequest = { 
+            if (!isGeneratingAI.value) {
+                showAIGenerationDialog.value = false 
+            }
+        }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 8.dp,
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "AI Generate Lesson",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Generate learning lessons automatically using AI. Enter a topic STRICTLY related to American Sign Language (ASL) and/or Filipino Sign Language (FSL).\n\nExamples: \"Basic ASL Greetings\", \"FSL Numbers 1-10\", \"ASL vs FSL Differences\", \"ASL Family Signs\", \"FSL Daily Conversation\", \"ASL Alphabet\", etc.\n\nThe AI will create comprehensive lesson content including title, detailed content, and practical \"Try It Out\" exercises - all focused on sign language learning.\n\nNote: You can add attachments (images, videos) to the generated lesson later.",
+                        color = MutedText,
+                        textAlign = TextAlign.Justify,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    OutlinedTextField(
+                        value = aiTopicInput.value,
+                        onValueChange = { aiTopicInput.value = it },
+                        label = {
+                            Text("Lesson Topic (ASL/FSL only)", fontFamily = InterFontFamily, color = Color(0xFF666666))
+                        },
+                        enabled = !isGeneratingAI.value,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("e.g., Basic ASL Greetings, FSL Numbers, ASL vs FSL Differences") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            cursorColor = Color.Black,
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color(0xFF666666),
+                            focusedBorderColor = Color.Black,
+                            unfocusedBorderColor = Color(0xFF666666)
+                        )
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedTextField(
+                        value = aiCountInput.value,
+                        onValueChange = { newValue ->
+                            val num = newValue.toIntOrNull()
+                            if (num != null && num > 0 && num <= 5) {
+                                aiCountInput.value = newValue
+                            } else if (newValue.isEmpty()) {
+                                aiCountInput.value = ""
+                            }
+                        },
+                        label = {
+                            Text("Number of Lessons (1-5)", fontFamily = InterFontFamily, color = Color(0xFF666666))
+                        },
+                        enabled = !isGeneratingAI.value,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            cursorColor = Color.Black,
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color(0xFF666666),
+                            focusedBorderColor = Color.Black,
+                            unfocusedBorderColor = Color(0xFF666666)
+                        ),
+                        supportingText = {
+                            Text(
+                                "Maximum 5 lessons can be generated",
+                                fontFamily = InterFontFamily,
+                                color = Color(0xFF666666)
+                            )
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    if (isGeneratingAI.value) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Accent
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Generating lesson(s)...",
+                                fontFamily = InterFontFamily,
+                                color = MutedText
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { showAIGenerationDialog.value = false },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)
+                            ) { 
+                                Text("Cancel", color = Color(0xFF666666)) 
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val topic = aiTopicInput.value.trim()
+                                    val count = aiCountInput.value.toIntOrNull() ?: 1
+                                    
+                                    if (topic.isEmpty()) {
+                                        Toast.makeText(context, "Please enter a topic", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    
+                                    if (count <= 0 || count > 5) {
+                                        Toast.makeText(context, "Please enter a number between 1 and 5", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    
+                                    isGeneratingAI.value = true // Loading sa dialog lang muna
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            val result = aiLessonService.generateLesson(topic, count)
+                                            
+                                            withContext(Dispatchers.Main) {
+                                                isGeneratingAI.value = false
+                                                showAIGenerationDialog.value = false
+                                                
+                                                result.onSuccess { aiResponse ->
+                                                    if (aiResponse.success && aiResponse.lessons != null) {
+                                                        // Save all lessons sequentially
+                                                        scope.launch(Dispatchers.IO) {
+                                                            val savedLessons = mutableListOf<Lesson>()
+                                                            for (generatedLesson in aiResponse.lessons) {
+                                                                val newLesson = Lesson(
+                                                                    title = generatedLesson.title,
+                                                                    content = generatedLesson.content,
+                                                                    tryItems = generatedLesson.tryItems,
+                                                                    lastUpdated = System.currentTimeMillis()
+                                                                )
+                                                                
+                                                                // Save to Firebase
+                                                                val saveResult = lessonRepository.saveLesson(newLesson, adminEmail, isNew = true)
+                                                                saveResult.onSuccess { lessonId ->
+                                                                    savedLessons.add(newLesson.copy(id = lessonId))
+                                                                }
+                                                            }
+                                                            
+                                                            // After saving, show loading sa main list para mag-refresh
+                                                            withContext(Dispatchers.Main) {
+                                                                isLoading.value = true // Loading sa main list - saka lang after saving
+                                                            }
+                                                            
+                                                            // Refresh lessons from Firestore to get updated list
+                                                            val refreshResult = lessonRepository.getLessons()
+                                                            refreshResult.onSuccess { refreshedLessons ->
+                                                                withContext(Dispatchers.Main) {
+                                                                    lessons.clear()
+                                                                    lessons.addAll(refreshedLessons)
+                                                                    isLoading.value = false
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Successfully generated and added ${savedLessons.size} lesson(s)!",
+                                                                        Toast.LENGTH_SHORT
+                                                                    ).show()
+                                                                }
+                                                            }.onFailure {
+                                                                withContext(Dispatchers.Main) {
+                                                                    // Still add saved lessons even if refresh fails
+                                                                    lessons.addAll(savedLessons)
+                                                                    isLoading.value = false
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Successfully generated and added ${savedLessons.size} lesson(s)!",
+                                                                        Toast.LENGTH_SHORT
+                                                                    ).show()
+                                                                }
+                                                            }
+                                                        }
+                                                    } else {
+                                                        Toast.makeText(
+                                                            context,
+                                                            aiResponse.message ?: "Failed to generate lessons",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                }.onFailure { e ->
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Error generating lessons: ${e.message}",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            withContext(Dispatchers.Main) {
+                                                isGeneratingAI.value = false
+                                                showAIGenerationDialog.value = false
+                                                Toast.makeText(
+                                                    context,
+                                                    "Error: ${e.localizedMessage}",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Accent,
+                                    contentColor = Color.Black
+                                )
+                            ) { 
+                                Text("Generate") 
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     if (deleteDialog.value.first) {
         ConfirmStyledDialog(
