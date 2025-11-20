@@ -245,25 +245,15 @@ class CommunitySpaceManagementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Validate user exists in Firestore with admin role
-        validateUserAndRole("admin") { isValid ->
-            if (!isValid) {
-                // User doesn't exist or wrong role, logout and redirect to login
-                performLogout(this)
-                finish()
-                return@validateUserAndRole
-            }
-            
-            // User is valid, show the screen
-            setContent {
-                val customSelectionColors = TextSelectionColors(
-                    handleColor = Color(0xFFFACC15),
-                    backgroundColor = Color(0x33FACC15)
-                )
+        // Show screen immediately like Community Space, validate inside screen if needed
+        setContent {
+            val customSelectionColors = TextSelectionColors(
+                handleColor = Color(0xFFFACC15),
+                backgroundColor = Color(0x33FACC15)
+            )
 
-                CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
-                    CommunitySpaceManagementScreen()
-                }
+            CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
+                CommunitySpaceManagementScreen()
             }
         }
     }
@@ -433,8 +423,9 @@ fun CommunitySpaceManagementScreen() {
                         )
                     )
                 })
-            var selectedTab by remember { mutableStateOf(0) }
-            TopTabNav_2(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+            // Always set selectedTab to 0 for Community screen
+            val selectedTab = 0
+            TopTabNav_2(selectedTab = selectedTab, onTabSelected = { /* Tab selection handled by navigation */ })
 
             OutlinedTextField(
                 value = searchQuery,

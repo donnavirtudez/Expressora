@@ -519,13 +519,13 @@ fun DifficultyRow(
     onClick: () -> Unit
 ) {
     val bg = when {
-        isPerfect -> Color(0xFFFFE082) // Soft warm gold for perfect - matches app's yellow theme
-        isCompleted -> Color(0xFFBBFFA0) // Light green for completed
+        isPerfect -> Color(0xFFBBFFA0) // Light green for perfect (swapped)
+        isCompleted -> Color(0xFFFFE082) // Soft warm gold for completed (swapped)
         !isUnlocked -> Color(0xFFE8E8E8) // Soft muted gray for locked - matches app's soft aesthetic
         else -> Color(0xFFF8F8F8) // Default
     }
     
-    val textColor = if (!isUnlocked) Color(0xFF999999) else if (isPerfect) Color(0xFFB8860B) else Color.Black
+    val textColor = if (!isUnlocked) Color(0xFF999999) else if (isPerfect) Color(0xFF4CAF50) else Color.Black
     val isClickable = isUnlocked && !isPerfect
     
     Column(
@@ -563,7 +563,7 @@ fun DifficultyRow(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = InterFontFamily,
-                            color = Color(0xFFB8860B) // Dark goldenrod to complement soft gold background
+                            color = Color(0xFF4CAF50) // Green to match green background
                         )
                     } else if (!isUnlocked) {
                         Spacer(modifier = Modifier.width(8.dp))
@@ -595,7 +595,8 @@ fun DifficultyRow(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = Color.Black
+                    tint = Color.Black,
+                    modifier = Modifier.size(30.dp)
                 )
             }
         }

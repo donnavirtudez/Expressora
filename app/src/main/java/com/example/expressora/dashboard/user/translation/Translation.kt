@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -248,10 +249,17 @@ fun TranslationScreen(
     var useFrontCamera by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
     var showCard by remember { mutableStateOf(false) }
+    var showInstruction by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         delay(3000)
         showCard = true
+    }
+    
+    // Hide instruction after 5 seconds
+    LaunchedEffect(Unit) {
+        delay(5000)
+        showInstruction = false
     }
 
     val translations = mapOf(
@@ -367,19 +375,36 @@ fun TranslationScreen(
                 }
             }
 
-            IconButton(
-                onClick = { useFrontCamera = !useFrontCamera },
+            Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(16.dp)
-                    .size(48.dp)
-                    .background(Color.Transparent)
+                    .padding(top = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Camera,
-                    contentDescription = "Switch Camera",
-                    tint = Color(0xFFFACC15)
-                )
+                IconButton(
+                    onClick = { useFrontCamera = !useFrontCamera },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Camera,
+                        contentDescription = "Switch Camera",
+                        tint = Color(0xFFFACC15)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Show instruction for 5 seconds then hide
+                if (showInstruction) {
+                    Text(
+                        text = "Put your hands in front of the camera",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Normal,
+                        textAlign = TextAlign.Center,
+                        fontFamily = InterFontFamily
+                    )
+                }
             }
 
             AnimatedVisibility(

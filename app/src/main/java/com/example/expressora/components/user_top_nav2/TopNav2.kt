@@ -76,7 +76,7 @@ fun TopTabNav2(
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable {
-                                onTabSelected(index)
+                                // Don't update selectedTab here - let the target Activity set it
                                 when (index) {
                                     0 -> context.startActivity(
                                         Intent(context, CommunitySpaceActivity::class.java)

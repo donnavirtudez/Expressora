@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -155,8 +156,9 @@ fun TutorialScreen() {
             }, onNotificationClick = {
                 context.startActivity(Intent(context, NotificationActivity::class.java))
             })
-            var selectedTab by remember { mutableStateOf(1) }
-            TopTabNav2(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+            // Always set selectedTab to 1 for ASL/FSL Video screen
+            val selectedTab = 1
+            TopTabNav2(selectedTab = selectedTab, onTabSelected = { /* Tab selection handled by navigation */ })
         }
     }, bottomBar = {
         BottomNav(onLearnClick = {

@@ -68,6 +68,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.Image
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -652,14 +653,32 @@ fun ManageQuizScreen(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(
-                        items = quiz.questions,
-                        key = { it.id }
-                    ) { question ->
-                        QuestionCard(
-                            question = question,
-                            onEdit = { navController.navigate("editQuestion/${quiz.id}/${question.id}") },
-                            onDelete = { deleteDialog.value = true to question.id })
+                    if (quiz.questions.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "No quiz available yet.",
+                                    textAlign = TextAlign.Center,
+                                    color = MutedText,
+                                    fontFamily = InterFontFamily
+                                )
+                            }
+                        }
+                    } else {
+                        items(
+                            items = quiz.questions,
+                            key = { it.id }
+                        ) { question ->
+                            QuestionCard(
+                                question = question,
+                                onEdit = { navController.navigate("editQuestion/${quiz.id}/${question.id}") },
+                                onDelete = { deleteDialog.value = true to question.id })
+                        }
                     }
                 }
             }

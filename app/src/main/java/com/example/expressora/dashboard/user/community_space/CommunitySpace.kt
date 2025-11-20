@@ -236,25 +236,15 @@ class CommunitySpaceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Validate user exists in Firestore with user role
-        validateUserAndRole("user") { isValid ->
-            if (!isValid) {
-                // User doesn't exist or wrong role, logout and redirect to login
-                performLogout(this)
-                finish()
-                return@validateUserAndRole
-            }
-            
-            // User is valid, show the screen
-            setContent {
-                val customSelectionColors = TextSelectionColors(
-                    handleColor = Color(0xFFFACC15),
-                    backgroundColor = Color(0x33FACC15)
-                )
+        // Show screen immediately like TutorialActivity, validate inside screen if needed
+        setContent {
+            val customSelectionColors = TextSelectionColors(
+                handleColor = Color(0xFFFACC15),
+                backgroundColor = Color(0x33FACC15)
+            )
 
-                CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
-                    CommunitySpaceScreen()
-                }
+            CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
+                CommunitySpaceScreen()
             }
         }
     }
@@ -422,8 +412,9 @@ fun CommunitySpaceScreen() {
                 context.startActivity(Intent(context, NotificationActivity::class.java))
             })
 
-            var selectedTab by remember { mutableStateOf(0) }
-            TopTabNav2(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+            // Always set selectedTab to 0 for Community screen
+            val selectedTab = 0
+            TopTabNav2(selectedTab = selectedTab, onTabSelected = { /* Tab selection handled by navigation */ })
 
             OutlinedTextField(
                 value = searchQuery,

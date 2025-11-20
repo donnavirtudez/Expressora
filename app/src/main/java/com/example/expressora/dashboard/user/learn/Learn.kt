@@ -1,15 +1,25 @@
 package com.example.expressora.dashboard.user.learn
 
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.camera.core.CameraSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.HoverInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,20 +32,31 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,11 +65,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,11 +83,23 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.BackHandler
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.decode.GifDecoder
 import com.example.expressora.R
 import com.example.expressora.components.top_nav3.TopNav3
 import com.example.expressora.components.user_bottom_nav.BottomNav
@@ -68,7 +107,72 @@ import com.example.expressora.dashboard.user.community_space.CommunitySpaceActiv
 import com.example.expressora.dashboard.user.quiz.QuizActivity
 import com.example.expressora.dashboard.user.translation.TranslationActivity
 import com.example.expressora.ui.theme.InterFontFamily
+import com.example.expressora.backend.LessonRepository
+import com.example.expressora.dashboard.admin.learningmanagement.Lesson
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import android.util.Log
+import android.widget.Toast
+import android.media.MediaPlayer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+
+fun getMimeType(context: Context, uri: Uri): String? {
+    return try {
+        context.contentResolver.getType(uri)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+fun getVideoFrame(context: Context, uri: Uri): Bitmap? {
+    return try {
+        val retriever = MediaMetadataRetriever()
+        retriever.setDataSource(context, uri)
+        val bitmap = retriever.getFrameAtTime(1_000_000)
+        retriever.release()
+        bitmap
+    } catch (e: Exception) {
+        null
+    }
+}
+
+fun getFileName(context: Context, uri: Uri): String? {
+    var name: String? = null
+    val cursor = context.contentResolver.query(uri, null, null, null, null)
+    cursor?.use {
+        if (it.moveToFirst()) {
+            val index = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index != -1) name = it.getString(index)
+        }
+    }
+    // Fallback: try to extract filename from URI path
+    if (name.isNullOrEmpty()) {
+        val uriString = uri.toString()
+        val lastSegment = uriString.substringAfterLast("/")
+        if (lastSegment.isNotEmpty() && lastSegment != uriString) {
+            name = lastSegment.substringBefore("?") // Remove query parameters if any
+        }
+    }
+    return name
+}
+
+fun getGifDataUri(context: Context, uri: Uri): String? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri)
+        inputStream?.use { stream ->
+            val bytes = stream.readBytes()
+            val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            "data:image/gif;base64,$base64"
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
 
 class LearnActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,8 +186,41 @@ fun LearnApp() {
     val navController = rememberNavController()
     val completedLessons = remember { mutableStateListOf<String>() }
     val context = LocalContext.current
+    val lessonRepository = remember { LessonRepository() }
+    val allLessons = remember { mutableStateListOf<Lesson>() }
+    val scope = rememberCoroutineScope()
+    var selectedLesson by remember { mutableStateOf<Lesson?>(null) }
 
     var currentScreen by remember { mutableStateOf("lessonList") }
+
+    // Function to refresh lessons from Firestore
+    fun refreshLessons() {
+        scope.launch(Dispatchers.IO) {
+            val result = lessonRepository.getLessons()
+            result.onSuccess { lessons ->
+                withContext(Dispatchers.Main) {
+                    allLessons.clear()
+                    allLessons.addAll(lessons)
+                }
+            }.onFailure { e ->
+                withContext(Dispatchers.Main) {
+                    Log.e("LearnApp", "Failed to load lessons: ${e.message}", e)
+                }
+            }
+        }
+    }
+
+    // Load lessons from Firestore on init and when screen becomes visible
+    LaunchedEffect(Unit) {
+        refreshLessons()
+    }
+    
+    // Refresh when navigating back to lesson list
+    LaunchedEffect(currentScreen) {
+        if (currentScreen == "lessonList") {
+            refreshLessons()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -111,42 +248,55 @@ fun LearnApp() {
                 composable("lessonList") {
                     currentScreen = "lessonList"
                     LessonListScreen(
-                        completedLessons = completedLessons, onLessonSelected = { lesson ->
-                            navController.currentBackStackEntry?.savedStateHandle?.set(
-                                "lesson", lesson
-                            )
+                        lessons = allLessons,
+                        completedLessons = completedLessons, 
+                        onLessonSelected = { lesson ->
+                            selectedLesson = lesson
                             navController.navigate("lessonDetail")
                         })
                 }
 
                 composable("lessonDetail") {
                     currentScreen = "lessonDetail"
-                    val lesson =
-                        navController.previousBackStackEntry?.savedStateHandle?.get<Pair<String, String>>(
-                            "lesson"
-                        )
-                    lesson?.let { (title, description) ->
+                    selectedLesson?.let { lesson ->
                         LessonDetailScreen(
-                            lessonTitle = title,
-                            lessonDescription = description,
-                            mediaAttachments = listOf(
-                                R.drawable.sample_profile,
-                                R.drawable.sample_profile2,
-                                R.drawable.expressora_logo,
-                                R.drawable.camera_preview,
-                            ),
+                            lesson = lesson,
                             onTryItOut = {
-                                if (!completedLessons.contains(title)) completedLessons.add(title)
                                 navController.navigate("detection")
                             })
+                    } ?: run {
+                        // If no lesson selected, go back to list
+                        LaunchedEffect(Unit) {
+                            navController.popBackStack()
+                        }
                     }
                 }
 
 
                 composable("detection") {
                     currentScreen = "detection"
-                    DetectionScreen(
-                        onDetectionFinished = { navController.navigate("completion") })
+                    selectedLesson?.let { lesson ->
+                        // Mark lesson as completed when entering Try It Out
+                        if (!completedLessons.contains(lesson.title)) {
+                            completedLessons.add(lesson.title)
+                        }
+                        DetectionScreen(
+                            tryItems = lesson.tryItems,
+                            onDetectionFinished = { 
+                                // Clean up camera immediately before navigation for smooth transition
+                                navController.navigate("completion")
+                            },
+                            onBack = {
+                                // Clean up camera immediately before navigation for smooth transition
+                                navController.popBackStack()
+                            }
+                        )
+                    } ?: run {
+                        // If no lesson selected, go back
+                        LaunchedEffect(Unit) {
+                            navController.popBackStack()
+                        }
+                    }
                 }
 
                 composable("completion") {
@@ -165,17 +315,10 @@ fun LearnApp() {
 
 @Composable
 fun LessonListScreen(
-    completedLessons: List<String>, onLessonSelected: (Pair<String, String>) -> Unit
+    lessons: List<Lesson>,
+    completedLessons: List<String>, 
+    onLessonSelected: (Lesson) -> Unit
 ) {
-    val lessonTitles = listOf(
-        "Introduction and Orientation" to "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis risus nec risus fermentum, tempor ullamcorper orci molestie. Sed pharetra lobortis eros eu consequat. Sed elementum ipsum at sem eleifend tincidunt. Vestibulum quis nibh vitae eros molestie vulputate ac quis nulla. Cras sagittis elementum eros quis commodo. Nullam convallis sollicitudin arcu quis porttitor. Proin dapibus tempor lectus, id finibus diam suscipit a. Vestibulum ac odio risus. Proin lectus mauris, fringilla ut efficitur sit amet, mattis quis risus. Aenean pellentesque consectetur risus. Sed luctus arcu eget lectus auctor mattis.\n" + "\n" + "Cras interdum et magna eu gravida. Maecenas gravida mollis viverra. Phasellus eu ante a metus pulvinar hendrerit. Integer dapibus, libero sit amet tempor mattis, libero lorem lobortis neque, in convallis mauris felis rutrum lorem. Fusce consequat a enim sed rhoncus. Duis viverra imperdiet velit laoreet pharetra. Morbi porta odio nec tellus mollis, non porta ante mollis. Fusce feugiat porttitor gravida. Integer pulvinar lorem et pretium malesuada. Ut condimentum mauris turpis, et egestas quam dapibus non. Integer eu felis quam. Quisque scelerisque a quam nec euismod. Nulla consequat nulla eget euismod venenatis. Etiam tellus erat, ultricies ut efficitur et, rhoncus a dolor.\n" + "\n" + "Quisque lacinia eleifend dui, nec bibendum quam. Sed aliquet neque placerat mauris malesuada venenatis. In ac orci feugiat, bibendum velit vitae, efficitur erat. Mauris aliquam nunc purus, vitae viverra nunc pulvinar in. Praesent sit amet commodo ante. Integer aliquet, justo quis aliquet mollis, mauris dui cursus elit, a convallis ante risus sit amet ipsum. Sed enim diam, consequat in auctor non, vestibulum ut nunc. Nam nec lectus iaculis, dapibus felis et, finibus metus. Maecenas faucibus lorem purus, eget porttitor leo eleifend condimentum. Praesent lectus lacus, sodales sit amet luctus et, interdum a nunc. Nunc condimentum faucibus lobortis.",
-        "Alphabets" to "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis risus nec risus fermentum, tempor ullamcorper orci molestie. Sed pharetra lobortis eros eu consequat. Sed elementum ipsum at sem eleifend tincidunt. Vestibulum quis nibh vitae eros molestie vulputate ac quis nulla. Cras sagittis elementum eros quis commodo. Nullam convallis sollicitudin arcu quis porttitor. Proin dapibus tempor lectus, id finibus diam suscipit a. Vestibulum ac odio risus. Proin lectus mauris, fringilla ut efficitur sit amet, mattis quis risus. Aenean pellentesque consectetur risus. Sed luctus arcu eget lectus auctor mattis.\n" + "\n" + "Cras interdum et magna eu gravida. Maecenas gravida mollis viverra. Phasellus eu ante a metus pulvinar hendrerit. Integer dapibus, libero sit amet tempor mattis, libero lorem lobortis neque, in convallis mauris felis rutrum lorem. Fusce consequat a enim sed rhoncus. Duis viverra imperdiet velit laoreet pharetra. Morbi porta odio nec tellus mollis, non porta ante mollis. Fusce feugiat porttitor gravida. Integer pulvinar lorem et pretium malesuada. Ut condimentum mauris turpis, et egestas quam dapibus non. Integer eu felis quam. Quisque scelerisque a quam nec euismod. Nulla consequat nulla eget euismod venenatis. Etiam tellus erat, ultricies ut efficitur et, rhoncus a dolor.\n" + "\n" + "Quisque lacinia eleifend dui, nec bibendum quam. Sed aliquet neque placerat mauris malesuada venenatis. In ac orci feugiat, bibendum velit vitae, efficitur erat. Mauris aliquam nunc purus, vitae viverra nunc pulvinar in. Praesent sit amet commodo ante. Integer aliquet, justo quis aliquet mollis, mauris dui cursus elit, a convallis ante risus sit amet ipsum. Sed enim diam, consequat in auctor non, vestibulum ut nunc. Nam nec lectus iaculis, dapibus felis et, finibus metus. Maecenas faucibus lorem purus, eget porttitor leo eleifend condimentum. Praesent lectus lacus, sodales sit amet luctus et, interdum a nunc. Nunc condimentum faucibus lobortis.",
-        "Greetings and Basic Phrases" to "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis risus nec risus fermentum, tempor ullamcorper orci molestie. Sed pharetra lobortis eros eu consequat. Sed elementum ipsum at sem eleifend tincidunt. Vestibulum quis nibh vitae eros molestie vulputate ac quis nulla. Cras sagittis elementum eros quis commodo. Nullam convallis sollicitudin arcu quis porttitor. Proin dapibus tempor lectus, id finibus diam suscipit a. Vestibulum ac odio risus. Proin lectus mauris, fringilla ut efficitur sit amet, mattis quis risus. Aenean pellentesque consectetur risus. Sed luctus arcu eget lectus auctor mattis.\n" + "\n" + "Cras interdum et magna eu gravida. Maecenas gravida mollis viverra. Phasellus eu ante a metus pulvinar hendrerit. Integer dapibus, libero sit amet tempor mattis, libero lorem lobortis neque, in convallis mauris felis rutrum lorem. Fusce consequat a enim sed rhoncus. Duis viverra imperdiet velit laoreet pharetra. Morbi porta odio nec tellus mollis, non porta ante mollis. Fusce feugiat porttitor gravida. Integer pulvinar lorem et pretium malesuada. Ut condimentum mauris turpis, et egestas quam dapibus non. Integer eu felis quam. Quisque scelerisque a quam nec euismod. Nulla consequat nulla eget euismod venenatis. Etiam tellus erat, ultricies ut efficitur et, rhoncus a dolor.\n" + "\n" + "Quisque lacinia eleifend dui, nec bibendum quam. Sed aliquet neque placerat mauris malesuada venenatis. In ac orci feugiat, bibendum velit vitae, efficitur erat. Mauris aliquam nunc purus, vitae viverra nunc pulvinar in. Praesent sit amet commodo ante. Integer aliquet, justo quis aliquet mollis, mauris dui cursus elit, a convallis ante risus sit amet ipsum. Sed enim diam, consequat in auctor non, vestibulum ut nunc. Nam nec lectus iaculis, dapibus felis et, finibus metus. Maecenas faucibus lorem purus, eget porttitor leo eleifend condimentum. Praesent lectus lacus, sodales sit amet luctus et, interdum a nunc. Nunc condimentum faucibus lobortis.",
-        "School" to "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis risus nec risus fermentum, tempor ullamcorper orci molestie. Sed pharetra lobortis eros eu consequat. Sed elementum ipsum at sem eleifend tincidunt. Vestibulum quis nibh vitae eros molestie vulputate ac quis nulla. Cras sagittis elementum eros quis commodo. Nullam convallis sollicitudin arcu quis porttitor. Proin dapibus tempor lectus, id finibus diam suscipit a. Vestibulum ac odio risus. Proin lectus mauris, fringilla ut efficitur sit amet, mattis quis risus. Aenean pellentesque consectetur risus. Sed luctus arcu eget lectus auctor mattis.\n" + "\n" + "Cras interdum et magna eu gravida. Maecenas gravida mollis viverra. Phasellus eu ante a metus pulvinar hendrerit. Integer dapibus, libero sit amet tempor mattis, libero lorem lobortis neque, in convallis mauris felis rutrum lorem. Fusce consequat a enim sed rhoncus. Duis viverra imperdiet velit laoreet pharetra. Morbi porta odio nec tellus mollis, non porta ante mollis. Fusce feugiat porttitor gravida. Integer pulvinar lorem et pretium malesuada. Ut condimentum mauris turpis, et egestas quam dapibus non. Integer eu felis quam. Quisque scelerisque a quam nec euismod. Nulla consequat nulla eget euismod venenatis. Etiam tellus erat, ultricies ut efficitur et, rhoncus a dolor.\n" + "\n" + "Quisque lacinia eleifend dui, nec bibendum quam. Sed aliquet neque placerat mauris malesuada venenatis. In ac orci feugiat, bibendum velit vitae, efficitur erat. Mauris aliquam nunc purus, vitae viverra nunc pulvinar in. Praesent sit amet commodo ante. Integer aliquet, justo quis aliquet mollis, mauris dui cursus elit, a convallis ante risus sit amet ipsum. Sed enim diam, consequat in auctor non, vestibulum ut nunc. Nam nec lectus iaculis, dapibus felis et, finibus metus. Maecenas faucibus lorem purus, eget porttitor leo eleifend condimentum. Praesent lectus lacus, sodales sit amet luctus et, interdum a nunc. Nunc condimentum faucibus lobortis.",
-        "Workplace" to "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis risus nec risus fermentum, tempor ullamcorper orci molestie. Sed pharetra lobortis eros eu consequat. Sed elementum ipsum at sem eleifend tincidunt. Vestibulum quis nibh vitae eros molestie vulputate ac quis nulla. Cras sagittis elementum eros quis commodo. Nullam convallis sollicitudin arcu quis porttitor. Proin dapibus tempor lectus, id finibus diam suscipit a. Vestibulum ac odio risus. Proin lectus mauris, fringilla ut efficitur sit amet, mattis quis risus. Aenean pellentesque consectetur risus. Sed luctus arcu eget lectus auctor mattis.\n" + "\n" + "Cras interdum et magna eu gravida. Maecenas gravida mollis viverra. Phasellus eu ante a metus pulvinar hendrerit. Integer dapibus, libero sit amet tempor mattis, libero lorem lobortis neque, in convallis mauris felis rutrum lorem. Fusce consequat a enim sed rhoncus. Duis viverra imperdiet velit laoreet pharetra. Morbi porta odio nec tellus mollis, non porta ante mollis. Fusce feugiat porttitor gravida. Integer pulvinar lorem et pretium malesuada. Ut condimentum mauris turpis, et egestas quam dapibus non. Integer eu felis quam. Quisque scelerisque a quam nec euismod. Nulla consequat nulla eget euismod venenatis. Etiam tellus erat, ultricies ut efficitur et, rhoncus a dolor.\n" + "\n" + "Quisque lacinia eleifend dui, nec bibendum quam. Sed aliquet neque placerat mauris malesuada venenatis. In ac orci feugiat, bibendum velit vitae, efficitur erat. Mauris aliquam nunc purus, vitae viverra nunc pulvinar in. Praesent sit amet commodo ante. Integer aliquet, justo quis aliquet mollis, mauris dui cursus elit, a convallis ante risus sit amet ipsum. Sed enim diam, consequat in auctor non, vestibulum ut nunc. Nam nec lectus iaculis, dapibus felis et, finibus metus. Maecenas faucibus lorem purus, eget porttitor leo eleifend condimentum. Praesent lectus lacus, sodales sit amet luctus et, interdum a nunc. Nunc condimentum faucibus lobortis.",
-        "Native Words and Idioms" to "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis risus nec risus fermentum, tempor ullamcorper orci molestie. Sed pharetra lobortis eros eu consequat. Sed elementum ipsum at sem eleifend tincidunt. Vestibulum quis nibh vitae eros molestie vulputate ac quis nulla. Cras sagittis elementum eros quis commodo. Nullam convallis sollicitudin arcu quis porttitor. Proin dapibus tempor lectus, id finibus diam suscipit a. Vestibulum ac odio risus. Proin lectus mauris, fringilla ut efficitur sit amet, mattis quis risus. Aenean pellentesque consectetur risus. Sed luctus arcu eget lectus auctor mattis.\n" + "\n" + "Cras interdum et magna eu gravida. Maecenas gravida mollis viverra. Phasellus eu ante a metus pulvinar hendrerit. Integer dapibus, libero sit amet tempor mattis, libero lorem lobortis neque, in convallis mauris felis rutrum lorem. Fusce consequat a enim sed rhoncus. Duis viverra imperdiet velit laoreet pharetra. Morbi porta odio nec tellus mollis, non porta ante mollis. Fusce feugiat porttitor gravida. Integer pulvinar lorem et pretium malesuada. Ut condimentum mauris turpis, et egestas quam dapibus non. Integer eu felis quam. Quisque scelerisque a quam nec euismod. Nulla consequat nulla eget euismod venenatis. Etiam tellus erat, ultricies ut efficitur et, rhoncus a dolor.\n" + "\n" + "Quisque lacinia eleifend dui, nec bibendum quam. Sed aliquet neque placerat mauris malesuada venenatis. In ac orci feugiat, bibendum velit vitae, efficitur erat. Mauris aliquam nunc purus, vitae viverra nunc pulvinar in. Praesent sit amet commodo ante. Integer aliquet, justo quis aliquet mollis, mauris dui cursus elit, a convallis ante risus sit amet ipsum. Sed enim diam, consequat in auctor non, vestibulum ut nunc. Nam nec lectus iaculis, dapibus felis et, finibus metus. Maecenas faucibus lorem purus, eget porttitor leo eleifend condimentum. Praesent lectus lacus, sodales sit amet luctus et, interdum a nunc. Nunc condimentum faucibus lobortis."
-    )
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -189,13 +332,33 @@ fun LessonListScreen(
             modifier = Modifier.padding(16.dp)
         )
 
-        lessonTitles.forEach { (title, subtitle) ->
-            val isCompleted = completedLessons.contains(title)
+        if (lessons.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("No lessons available yet.", fontFamily = InterFontFamily, color = Color(0xFF666666))
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = 8.dp, // Space between "Learn" title and first lesson
+                    bottom = 24.dp // Space between last lesson and bottom nav
+                ),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                items(lessons, key = { it.id }) { lesson ->
+                    val isCompleted = completedLessons.contains(lesson.title)
             LessonRow(
-                title = title,
-                subtitle = subtitle,
+                        title = lesson.title,
+                        subtitle = lesson.content,
                 isCompleted = isCompleted,
-                onClick = { onLessonSelected(title to subtitle) })
+                        onClick = { onLessonSelected(lesson) })
+                }
+            }
         }
     }
 }
@@ -214,7 +377,7 @@ fun LessonRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -246,13 +409,40 @@ fun LessonRow(
 
 @Composable
 fun LessonDetailScreen(
-    lessonTitle: String,
-    lessonDescription: String,
-    mediaAttachments: List<Int>,
+    lesson: Lesson,
     onTryItOut: () -> Unit
 ) {
     val scrollState = rememberScrollState()
-    var selectedImage by remember { mutableStateOf<Int?>(null) }
+    var selectedMediaUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var selectedMediaType by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    // Auto-open files when selected (no dialog)
+    LaunchedEffect(selectedMediaUri, selectedMediaType) {
+        val uri = selectedMediaUri
+        val type = selectedMediaType ?: (uri?.let { getMimeType(context, it) } ?: "")
+        
+        if (uri != null && type.isNotEmpty() && 
+            !type.startsWith("video") && 
+            !type.startsWith("audio") && 
+            !type.startsWith("image") && 
+            !uri.toString().startsWith("data:image")) {
+            // It's a file - open it immediately
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, type)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Cannot open file: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                // Clear selection
+                selectedMediaUri = null
+                selectedMediaType = null
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -262,7 +452,7 @@ fun LessonDetailScreen(
                 .padding(24.dp)
         ) {
             Text(
-                text = lessonTitle,
+                text = lesson.title,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = InterFontFamily
@@ -270,7 +460,7 @@ fun LessonDetailScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = lessonDescription,
+                text = lesson.content,
                 fontSize = 16.sp,
                 fontFamily = InterFontFamily,
                 color = Color(0xFF666666),
@@ -281,7 +471,7 @@ fun LessonDetailScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (mediaAttachments.isNotEmpty()) {
+            if (lesson.attachments.isNotEmpty()) {
                 Text(
                     text = "Attachments",
                     fontSize = 18.sp,
@@ -290,11 +480,14 @@ fun LessonDetailScreen(
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
-                val chunkedAttachments = mediaAttachments.chunked(2)
+                val chunkedAttachments = lesson.attachments.chunked(2)
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     chunkedAttachments.forEach { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            rowItems.forEach { imageRes ->
+                            rowItems.forEach { uri ->
+                                val uriString = uri.toString()
+                                val mimeType = getMimeType(context, uri) ?: ""
+                                
                                 Card(
                                     shape = RoundedCornerShape(16.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -304,13 +497,189 @@ fun LessonDetailScreen(
                                         .clickable(
                                             indication = null,
                                             interactionSource = remember { MutableInteractionSource() }) {
-                                            selectedImage = imageRes
+                                            selectedMediaUri = uri
+                                            selectedMediaType = mimeType
                                         }) {
-                                    AsyncImage(
-                                        model = imageRes,
-                                        contentDescription = "Lesson Media",
+                                    when {
+                                        uriString.startsWith("data:image") -> {
+                                            // Base64 image - check if it's a GIF
+                                            val isGifBase64 = uriString.contains("image/gif", ignoreCase = true)
+                                            if (isGifBase64) {
+                                                // Use WebView for base64 GIF animation
+                                                AndroidView(
+                                                    factory = { ctx ->
+                                                        WebView(ctx).apply {
+                                                            webViewClient = WebViewClient()
+                                                            settings.javaScriptEnabled = true
+                                                            settings.loadWithOverviewMode = true
+                                                            settings.useWideViewPort = true
+                                                            settings.domStorageEnabled = true
+                                                            loadDataWithBaseURL("file:///android_asset/", "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body style='margin:0;padding:0;background:transparent;'><img src='$uriString' style='width:100%;height:100%;object-fit:cover;display:block;'/></body></html>", "text/html", "UTF-8", null)
+                                                        }
+                                                    },
                                         modifier = Modifier.fillMaxSize()
-                                    )
+                                                )
+                                            } else {
+                                                // Regular base64 image
+                                                val base64String = uriString.substringAfter(",")
+                                                val imageBytes = android.util.Base64.decode(base64String, android.util.Base64.NO_WRAP)
+                                                val bitmap = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                                                bitmap?.let {
+                                                    Image(
+                                                        bitmap = it.asImageBitmap(),
+                                                        contentDescription = "Lesson Image",
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        mimeType.startsWith("image") -> {
+                                            // Image file - use WebView for GIFs to ensure animation
+                                            val isGif = mimeType.contains("gif", ignoreCase = true) || 
+                                                       uri.toString().lowercase().endsWith(".gif")
+                                            if (isGif) {
+                                                // Use WebView for GIF animation (most reliable)
+                                                val gifDataUri = remember(uri) { getGifDataUri(context, uri) }
+                                                AndroidView(
+                                                    factory = { ctx ->
+                                                        WebView(ctx).apply {
+                                                            webViewClient = WebViewClient()
+                                                            settings.javaScriptEnabled = true // Enable JS for better GIF support
+                                                            settings.loadWithOverviewMode = true
+                                                            settings.useWideViewPort = true
+                                                            settings.domStorageEnabled = true
+                                                            settings.allowFileAccess = true
+                                                            settings.allowContentAccess = true
+                                                            if (gifDataUri != null) {
+                                                                loadDataWithBaseURL("file:///android_asset/", "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body style='margin:0;padding:0;background:transparent;'><img src='$gifDataUri' style='width:100%;height:100%;object-fit:cover;display:block;'/></body></html>", "text/html", "UTF-8", null)
+                                                            } else {
+                                                                loadUrl(uri.toString())
+                                                            }
+                                                        }
+                                                    },
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            } else {
+                                                // Regular images
+                                                AsyncImage(
+                                                    model = ImageRequest.Builder(context)
+                                                        .data(uri)
+                                                        .build(),
+                                                    contentDescription = "Lesson Image",
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            }
+                                        }
+                                        mimeType.startsWith("video") -> {
+                                            // Video - show thumbnail with play icon and circular black background
+                                            val thumb = getVideoFrame(context, uri)
+                                            Box(modifier = Modifier.fillMaxSize()) {
+                                                if (thumb != null) {
+                                                    Image(
+                                                        bitmap = thumb.asImageBitmap(),
+                                                        contentDescription = "Video Thumbnail",
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .background(Color.Black),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.VideoLibrary,
+                                                            contentDescription = "Video",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(48.dp)
+                                                        )
+                                                    }
+                                                }
+                                                // Play icon overlay with circular black background
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(Color.Black.copy(alpha = 0.3f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(56.dp)
+                                                            .background(Color.Black.copy(alpha = 0.7f), CircleShape),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.PlayArrow,
+                                                            contentDescription = "Play Video",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(32.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        mimeType.startsWith("audio") -> {
+                                            // Audio file - show music icon with file name
+                                            val audioFileName = getFileName(context, uri) ?: "Audio"
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color(0xFFF2F4F7)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    Icon(
+                                                        Icons.Default.MusicNote,
+                                                        contentDescription = "Audio File",
+                                                        tint = Color(0xFF666666),
+                                                        modifier = Modifier.size(48.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Text(
+                                                        audioFileName,
+                                                        fontSize = 12.sp,
+                                                        color = Color(0xFF666666),
+                                                        fontFamily = InterFontFamily,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        textAlign = TextAlign.Center
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        else -> {
+                                            // Other file types - show file icon with file name
+                                            val fileName = getFileName(context, uri) ?: "File"
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color(0xFFF2F4F7)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    Icon(
+                                                        Icons.Default.InsertDriveFile,
+                                                        contentDescription = "File",
+                                                        tint = Color(0xFF666666),
+                                                        modifier = Modifier.size(48.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Text(
+                                                        fileName,
+                                                        fontSize = 12.sp,
+                                                        color = Color(0xFF666666),
+                                                        fontFamily = InterFontFamily,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        textAlign = TextAlign.Center
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -346,20 +715,122 @@ fun LessonDetailScreen(
             Spacer(modifier = Modifier.height(20.dp))
         }
 
-        selectedImage?.let { imageRes ->
+        // Video player dialog
+        selectedMediaUri?.let { uri ->
+            val type = selectedMediaType ?: getMimeType(context, uri) ?: ""
+            when {
+                type.startsWith("video") -> {
+                    VideoPlayerDialog(videoUri = uri, onDismiss = { 
+                        selectedMediaUri = null
+                        selectedMediaType = null
+                    })
+                }
+                type.startsWith("audio") -> {
+                    AudioPlayerDialog(audioUri = uri, onDismiss = { 
+                        selectedMediaUri = null
+                        selectedMediaType = null
+                    })
+                }
+                else -> {
+                    // Image or file viewer
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.8f))
-                    .clickable { selectedImage = null }, contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = imageRes,
+                            .clickable { 
+                                selectedMediaUri = null
+                                selectedMediaType = null
+                            }, 
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val uriString = uri.toString()
+                        when {
+                            uriString.startsWith("data:image") -> {
+                                // Check if it's a base64 GIF
+                                val isGifBase64 = uriString.contains("image/gif", ignoreCase = true)
+                                if (isGifBase64) {
+                                    // Use WebView for base64 GIF animation
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            WebView(ctx).apply {
+                                                webViewClient = WebViewClient()
+                                                settings.javaScriptEnabled = true
+                                                settings.loadWithOverviewMode = true
+                                                settings.useWideViewPort = true
+                                                settings.domStorageEnabled = true
+                                                loadDataWithBaseURL("file:///android_asset/", "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body style='margin:0;padding:0;background:transparent;display:flex;justify-content:center;align-items:center;height:100vh;'><img src='$uriString' style='max-width:100%;max-height:100%;object-fit:contain;display:block;'/></body></html>", "text/html", "UTF-8", null)
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.8f)
+                                            .fillMaxHeight(0.6f)
+                                    )
+                                } else {
+                                    // Regular base64 image
+                                    val base64String = uriString.substringAfter(",")
+                                    val imageBytes = android.util.Base64.decode(base64String, android.util.Base64.NO_WRAP)
+                                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                                    bitmap?.let {
+                                        Image(
+                                            bitmap = it.asImageBitmap(),
                     contentDescription = null,
+                                            modifier = Modifier
+                                                .fillMaxWidth(0.8f)
+                                                .fillMaxHeight(0.6f),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    }
+                                }
+                            }
+                            type.startsWith("image") -> {
+                                // Image viewer - use WebView for GIFs to ensure animation
+                                val isGif = type.contains("gif", ignoreCase = true) || 
+                                           uri.toString().lowercase().endsWith(".gif")
+                                if (isGif) {
+                                    // Use WebView for GIF animation (most reliable)
+                                    val gifDataUri = remember(uri) { getGifDataUri(context, uri) }
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            WebView(ctx).apply {
+                                                webViewClient = WebViewClient()
+                                                settings.javaScriptEnabled = true // Enable JS for better GIF support
+                                                settings.loadWithOverviewMode = true
+                                                settings.useWideViewPort = true
+                                                settings.domStorageEnabled = true
+                                                settings.allowFileAccess = true
+                                                settings.allowContentAccess = true
+                                                if (gifDataUri != null) {
+                                                    loadDataWithBaseURL("file:///android_asset/", "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body style='margin:0;padding:0;background:transparent;display:flex;justify-content:center;align-items:center;height:100vh;'><img src='$gifDataUri' style='max-width:100%;max-height:100%;object-fit:contain;display:block;'/></body></html>", "text/html", "UTF-8", null)
+                                                } else {
+                                                    loadUrl(uri.toString())
+                                                }
+                                            }
+                                        },
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
                         .fillMaxHeight(0.6f)
                 )
+                                } else {
+                                    // Regular images
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context)
+                                            .data(uri)
+                                            .build(),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.8f)
+                                            .fillMaxHeight(0.6f),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
+                            }
+                            else -> {
+                                // File will be auto-opened by LaunchedEffect above
+                                // Show nothing or a brief message
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -367,121 +838,229 @@ fun LessonDetailScreen(
 
 @Composable
 fun DetectionScreen(
-    onDetectionFinished: () -> Unit
+    tryItems: List<String>,
+    onDetectionFinished: () -> Unit,
+    onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showCheck by remember { mutableStateOf(false) }
     var autoFinishTriggered by remember { mutableStateOf(false) }
     var useFrontCamera by remember { mutableStateOf(false) }
+    var currentItemIndex by remember { mutableStateOf(0) }
+    var showInstruction by remember { mutableStateOf(true) }
+    var isNavigatingBack by remember { mutableStateOf(false) }
+    
+    val currentItem = if (tryItems.isNotEmpty() && currentItemIndex < tryItems.size) {
+        tryItems[currentItemIndex]
+    } else {
+        ""
+    }
 
     val lifecycleOwner = context as ComponentActivity
     val previewView = remember { PreviewView(context) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+    // Handle back button press - clean up camera first for smooth navigation
+    BackHandler(onBack = {
+        // Hide camera preview immediately
+        isNavigatingBack = true
+        // Clean up camera immediately before navigation for smooth transition (like Translation)
+        try {
+            cameraProvider?.unbindAll()
+            cameraProvider = null
+        } catch (e: Exception) {
+            // Ignore errors during cleanup
+        }
+        // Navigate back immediately - no delay for instant transition to lesson details
+        onBack()
+    })
+
+    // Clean up camera immediately when composable is disposed - improved for smooth navigation
+    DisposableEffect(Unit) {
+        onDispose {
+            // Immediately unbind camera when screen is exited
+            try {
+                cameraProvider?.unbindAll()
+                cameraProvider = null
+            } catch (e: Exception) {
+                // Ignore errors during cleanup
+            }
+        }
+    }
 
     LaunchedEffect(useFrontCamera) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             try {
-                val cameraProvider = cameraProviderFuture.get()
+                val provider = cameraProviderFuture.get()
                 val cameraPreview = androidx.camera.core.Preview.Builder().build().also {
                     it.surfaceProvider = previewView.surfaceProvider
                 }
                 val cameraSelector = if (useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA
                 else CameraSelector.DEFAULT_BACK_CAMERA
 
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, cameraPreview)
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, cameraSelector, cameraPreview)
+                cameraProvider = provider
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }, ContextCompat.getMainExecutor(context))
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentItemIndex) {
+        showCheck = false
+        if (tryItems.isNotEmpty() && currentItemIndex < tryItems.size) {
         delay(3000)
         showCheck = true
         delay(3000)
+            if (currentItemIndex < tryItems.size - 1) {
+                // Move to next item
+                currentItemIndex++
+            } else {
+                // Last item completed, finish
         if (!autoFinishTriggered) {
             autoFinishTriggered = true
             onDetectionFinished()
+                }
+            }
         }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(if (isNavigatingBack) Color.Transparent else Color.Black)
     ) {
-        AndroidView(modifier = Modifier.fillMaxSize(), factory = { previewView })
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            IconButton(
-                onClick = { useFrontCamera = !useFrontCamera }, modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Camera,
-                    contentDescription = "Flip Camera",
-                    tint = Color(0xFFFACC15)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Put your hands in front of the camera",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center
-            )
+        // Hide camera preview immediately when navigating back
+        if (!isNavigatingBack) {
+            AndroidView(modifier = Modifier.fillMaxSize(), factory = { previewView })
         }
 
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(140.dp)
-                .align(Alignment.BottomCenter),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F8F8)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
-        ) {
-            Column(
+        // Hide all UI elements when navigating back
+        if (!isNavigatingBack) {
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
             ) {
-                Text(
-                    text = "The prompt will move on to the next step once you perform the sign language correctly.",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    color = Color.Black,
-                    textAlign = TextAlign.Justify
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "A",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 28.sp,
-                        color = Color.Black
-                    )
-                    if (showCheck) {
-                        Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { useFrontCamera = !useFrontCamera }, modifier = Modifier.size(48.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = "Confirm",
-                            tint = Color.Black,
-                            modifier = Modifier.size(28.dp)
+                            imageVector = Icons.Filled.Camera,
+                            contentDescription = "Flip Camera",
+                            tint = Color(0xFFFACC15)
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Show instruction for 5-20 seconds then hide
+                    if (showInstruction) {
+                        Text(
+                            text = "Put your hands in front of the camera",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Normal,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Hide instruction after 5 seconds
+        LaunchedEffect(Unit) {
+            delay(5000)
+            showInstruction = false
+        }
+
+        // Hide card when navigating back
+        if (!isNavigatingBack) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F8F8)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Text(
+                                text = "The prompt will move on to the next step once you perform the sign language correctly.",
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 16.sp,
+                                color = Color.Black,
+                                textAlign = TextAlign.Justify
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = if (currentItem.isNotEmpty()) currentItem else "No items",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 22.sp,
+                                    color = Color.Black
+                                )
+                                if (showCheck) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = "Confirm",
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Skip button at bottom right with circular ripple effect (same style as Try It Out button)
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(32.dp)
+                                .clip(CircleShape) // Clip to circular shape so ripple is bounded
+                                .background(Color(0xFFFACC15)) // Same yellow color as Try It Out button
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = {
+                                        if (currentItemIndex < tryItems.size - 1) {
+                                            currentItemIndex++
+                                            showCheck = false
+                                        } else {
+                                            onDetectionFinished()
+                                        }
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowRight,
+                                contentDescription = "Skip",
+                                tint = Color.Black,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -556,8 +1135,200 @@ fun LessonCompletionScreen(onNextCourse: () -> Unit) {
     }
 }
 
+@UnstableApi
+@Composable
+fun VideoPlayerDialog(videoUri: Uri, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var player: ExoPlayer? by remember { mutableStateOf(null) }
+
+    DisposableEffect(videoUri) {
+        val exoPlayer = ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(videoUri))
+            prepare()
+            playWhenReady = true
+        }
+        player = exoPlayer
+
+        onDispose {
+            exoPlayer.release()
+            player = null
+        }
+    }
+
+    var aspectRatio by remember { mutableStateOf(16f / 9f) }
+    var hasError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(videoUri) {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, videoUri)
+            val videoWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() ?: 16
+            val videoHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() ?: 9
+            aspectRatio = videoWidth.toFloat() / videoHeight.toFloat()
+            hasError = false
+        } catch (e: Exception) {
+            hasError = true
+        } finally {
+            try {
+                retriever.release()
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        if (hasError) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .aspectRatio(16f / 9f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Error loading video", color = Color.White)
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .aspectRatio(aspectRatio)
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            this.player = player
+                            this.useController = true
+                            this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            this.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        }
+                    }, 
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AudioPlayerDialog(audioUri: Uri, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableStateOf(0) }
+    var duration by remember { mutableStateOf(0) }
+
+    DisposableEffect(audioUri) {
+        val player = MediaPlayer().apply {
+            setDataSource(context, audioUri)
+            prepare()
+            duration = this@apply.duration
+            isLooping = true // Loop continuously
+            start() // Auto-play when opened
+        }
+        mediaPlayer = player
+        isPlaying = true
+
+        onDispose {
+            player.release()
+            mediaPlayer = null
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier.padding(40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Music icon with circular background matching learn design
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            Color(0xFFFACC15).copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.MusicNote,
+                        contentDescription = "Audio",
+                        modifier = Modifier.size(32.dp),
+                        tint = Color(0xFFFACC15)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Audio file name
+                Text(
+                    getFileName(context, audioUri) ?: "Audio File",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = InterFontFamily,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Status text
+                Text(
+                    if (isPlaying) "Playing" else "Paused",
+                    fontSize = 14.sp,
+                    fontFamily = InterFontFamily,
+                    color = Color(0xFF666666),
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // Play/Pause button matching learn design (no hover effect)
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(
+                            Color(0xFFFACC15),
+                            shape = CircleShape
+                        )
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {
+                            mediaPlayer?.let { mp ->
+                                if (isPlaying) {
+                                    mp.pause()
+                                    isPlaying = false
+                                } else {
+                                    mp.start()
+                                    isPlaying = true
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        modifier = Modifier.size(36.dp),
+                        tint = Color.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun PreviewLearnApp() {
     LearnApp()
 }
+

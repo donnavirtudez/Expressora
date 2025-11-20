@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
@@ -55,6 +57,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -77,6 +80,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -105,10 +110,18 @@ import com.example.expressora.dashboard.admin.analytics.AnalyticsDashboardActivi
 import com.example.expressora.dashboard.admin.communityspacemanagement.CommunitySpaceManagementActivity
 import com.example.expressora.dashboard.admin.quizmanagement.QuizManagementActivity
 import com.example.expressora.ui.theme.InterFontFamily
+import com.example.expressora.backend.LessonRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import android.content.ContentResolver
+import android.graphics.BitmapFactory
+import android.util.Base64
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 
 data class Lesson(
     val id: String = UUID.randomUUID().toString(),
@@ -191,25 +204,111 @@ class LearningManagementActivity : ComponentActivity() {
     }
 }
 
+// Helper function to convert image to base64 data URI
+suspend fun convertImageToBase64(context: Context, imageUri: Uri): Pair<String?, String?> {
+    return try {
+        val contentResolver: ContentResolver = context.contentResolver
+        val inputStream: InputStream? = contentResolver.openInputStream(imageUri)
+
+        if (inputStream == null) {
+            val errorMsg = "Failed to open input stream from URI: $imageUri"
+            android.util.Log.e("LearningManagement", errorMsg)
+            return Pair(null, errorMsg)
+        }
+        
+        // Check image file size (max 5MB)
+        val maxFileSize = 5 * 1024 * 1024 // 5MB in bytes
+        val availableBytes = inputStream.available()
+        if (availableBytes > maxFileSize) {
+            inputStream.close()
+            val errorMsg = "Image size exceeds 5MB limit. Please use a smaller image."
+            android.util.Log.e("LearningManagement", errorMsg)
+            return Pair(null, errorMsg)
+        }
+
+        inputStream.use { stream ->
+            // For images, use bitmap conversion
+            val bitmap = BitmapFactory.decodeStream(stream)
+
+            if (bitmap == null) {
+                val errorMsg = "Failed to decode image"
+                android.util.Log.e("LearningManagement", errorMsg)
+                return Pair(null, errorMsg)
+            }
+
+            // Resize image to reduce size (max 800x800)
+            val maxSize = 800
+            val width = bitmap.width
+            val height = bitmap.height
+            val scale = if (width > height) {
+                maxSize.toFloat() / width
+            } else {
+                maxSize.toFloat() / height
+            }
+
+            val resizedBitmap = if (scale < 1.0f) {
+                Bitmap.createScaledBitmap(
+                    bitmap,
+                    (width * scale).toInt(),
+                    (height * scale).toInt(),
+                    true
+                )
+            } else {
+                bitmap
+            }
+
+            // Compress to JPEG (quality 70%)
+            val outputStream = ByteArrayOutputStream()
+            resizedBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+            val imageBytes = outputStream.toByteArray()
+
+            // Convert to base64
+            val base64String = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+            val dataUri = "data:image/jpeg;base64,$base64String"
+
+            Pair(dataUri, null)
+        }
+    } catch (e: Exception) {
+        val errorMsg = "Error converting image: ${e.message ?: e.javaClass.simpleName}"
+        android.util.Log.e("LearningManagement", errorMsg, e)
+        Pair(null, errorMsg)
+    }
+}
+
 @Composable
 fun LessonApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
+    val lessonRepository = remember { LessonRepository() }
+    val sharedPref = remember { context.getSharedPreferences("user_session", android.content.Context.MODE_PRIVATE) }
+    val adminEmail = remember { sharedPref.getString("user_email", "") ?: "" }
+    val scope = rememberCoroutineScope()
 
-    val allLessons = remember {
-        mutableStateListOf(
-            Lesson(
-                title = "Alphabets",
-                content = "Overview of Sign Language alphabets",
-                tryItems = listOf("A", "B"),
-                lastUpdated = System.currentTimeMillis() - 86_400_000L
-            ), Lesson(
-                title = "Greetings and Phrases",
-                content = "Characters and samples",
-                tryItems = listOf("Hello", "Thank you"),
-                lastUpdated = System.currentTimeMillis() - 2 * 86_400_000L
-            )
-        )
+    val allLessons = remember { mutableStateListOf<Lesson>() }
+    var isLoading by remember { mutableStateOf(true) }
+
+    // Function to refresh lessons from Firestore
+    fun refreshLessons() {
+        scope.launch(Dispatchers.IO) {
+            val result = lessonRepository.getLessons()
+            result.onSuccess { lessons ->
+                withContext(Dispatchers.Main) {
+                    allLessons.clear()
+                    allLessons.addAll(lessons)
+                    isLoading = false
+                }
+            }.onFailure { e ->
+                withContext(Dispatchers.Main) {
+                    isLoading = false
+                    Toast.makeText(context, "Failed to load lessons: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Load lessons from Firestore on init
+    LaunchedEffect(Unit) {
+        refreshLessons()
     }
 
     Scaffold(
@@ -234,34 +333,124 @@ fun LessonApp() {
             NavHost(navController = navController, startDestination = "list") {
 
                 composable("list") {
+                    val listContext = LocalContext.current
+                    val listScope = rememberCoroutineScope()
+                    
+                    // Refresh lessons when navigating to list screen
+                    LaunchedEffect(Unit) {
+                        listScope.launch(Dispatchers.IO) {
+                            val result = lessonRepository.getLessons()
+                            result.onSuccess { lessons ->
+                                withContext(Dispatchers.Main) {
+                                    allLessons.clear()
+                                    allLessons.addAll(lessons)
+                                }
+                            }
+                        }
+                    }
+                    
                     LessonListScreen(
                         lessons = allLessons,
                         onAddLesson = { navController.navigate("add") },
                         onEditLesson = { lessonId -> navController.navigate("edit/$lessonId") },
                         onDeleteLesson = { lessonId ->
-                            val idx = allLessons.indexOfFirst { it.id == lessonId }
-                            if (idx != -1) {
-                                allLessons.removeAt(idx)
-                                Toast.makeText(context, "Lesson deleted", Toast.LENGTH_SHORT).show()
+                            listScope.launch(Dispatchers.IO) {
+                                val result = lessonRepository.deleteLesson(lessonId)
+                                withContext(Dispatchers.Main) {
+                                    result.onSuccess {
+                                        // Update UI immediately
+                                        val idx = allLessons.indexOfFirst { it.id == lessonId }
+                                        if (idx != -1) {
+                                            allLessons.removeAt(idx)
+                                        }
+                                        Toast.makeText(listContext, "Lesson deleted", Toast.LENGTH_SHORT).show()
+                                        // Refresh from Firestore to ensure sync
+                                        scope.launch(Dispatchers.IO) {
+                                            val refreshResult = lessonRepository.getLessons()
+                                            refreshResult.onSuccess { lessons ->
+                                                withContext(Dispatchers.Main) {
+                                                    allLessons.clear()
+                                                    allLessons.addAll(lessons)
+                                                    // Hide loading indicator after refresh completes
+                                                    // Loading is managed in LessonListScreen, we need to trigger recomposition
+                                                }
+                                            }.onFailure {
+                                                withContext(Dispatchers.Main) {
+                                                    // Hide loading indicator even on refresh failure
+                                                }
+                                            }
+                                        }
+                                    }.onFailure { e ->
+                                        Toast.makeText(listContext, "Failed to delete lesson: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
                         })
                 }
 
                 composable("add") {
+                    val addContext = LocalContext.current
+                    val addScope = rememberCoroutineScope()
                     val temp = remember { Lesson() }
                     LessonEditorScreen(
                         title = "Add Lesson",
                         lesson = temp,
                         isEditMode = false,
                         onSaveConfirmed = { saved ->
-                            allLessons.add(0, saved.copy(lastUpdated = System.currentTimeMillis()))
-                            Toast.makeText(context, "Lesson added", Toast.LENGTH_SHORT).show()
-                            navController.popBackStack()
+                            // Convert image attachments to base64
+                            addScope.launch(Dispatchers.IO) {
+                                val processedAttachments = mutableListOf<Uri>()
+                                saved.attachments.forEach { uri ->
+                                    val mimeType = getMimeType(addContext, uri) ?: ""
+                                    if (mimeType.startsWith("image/")) {
+                                        val (base64Uri, error) = convertImageToBase64(addContext, uri)
+                                        if (base64Uri != null) {
+                                            processedAttachments.add(Uri.parse(base64Uri))
+                                        } else {
+                                            // If conversion fails, keep original URI
+                                            processedAttachments.add(uri)
+                                        }
+                                    } else {
+                                        // For videos, audio, and other files, keep as URI
+                                        processedAttachments.add(uri)
+                                    }
+                                }
+                                
+                                val lessonToSave = saved.copy(
+                                    attachments = processedAttachments,
+                                    lastUpdated = System.currentTimeMillis()
+                                )
+                                
+                                val result = lessonRepository.saveLesson(lessonToSave, adminEmail, isNew = true)
+                                withContext(Dispatchers.Main) {
+                                    result.onSuccess { lessonId ->
+                                        // Update UI immediately with new lesson
+                                        val newLesson = lessonToSave.copy(id = lessonId)
+                                        allLessons.add(0, newLesson)
+                                        Toast.makeText(addContext, "Lesson added", Toast.LENGTH_SHORT).show()
+                                        navController.popBackStack()
+                                        // Refresh from Firestore to ensure sync
+                                        scope.launch(Dispatchers.IO) {
+                                            val refreshResult = lessonRepository.getLessons()
+                                            refreshResult.onSuccess { lessons ->
+                                                withContext(Dispatchers.Main) {
+                                                    allLessons.clear()
+                                                    allLessons.addAll(lessons)
+                                                }
+                                            }
+                                        }
+                                    }.onFailure { e ->
+                                        Toast.makeText(addContext, "Failed to save lesson: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         })
                 }
 
-                composable("edit/{lessonId}") { backEntry ->
-                    val lessonId = backEntry.arguments?.getString("lessonId") ?: return@composable
+                composable("edit/{lessonId}") { backStackEntry ->
+                    val editContext = LocalContext.current
+                    val editScope = rememberCoroutineScope()
+                    val lessonId = backStackEntry.arguments?.getString("lessonId") ?: return@composable
                     val idx = allLessons.indexOfFirst { it.id == lessonId }
                     if (idx == -1) return@composable
                     val lessonCopy = remember {
@@ -275,13 +464,61 @@ fun LessonApp() {
                         lesson = lessonCopy,
                         isEditMode = true,
                         onSaveConfirmed = { updated ->
-                            val i = allLessons.indexOfFirst { it.id == updated.id }
-                            if (i != -1) {
-                                allLessons[i] =
-                                    updated.copy(lastUpdated = System.currentTimeMillis())
-                                Toast.makeText(context, "Lesson updated", Toast.LENGTH_SHORT).show()
+                            // Convert image attachments to base64
+                            editScope.launch(Dispatchers.IO) {
+                                val processedAttachments = mutableListOf<Uri>()
+                                updated.attachments.forEach { uri ->
+                                    val uriString = uri.toString()
+                                    // If already a base64 data URI, keep it
+                                    if (uriString.startsWith("data:")) {
+                                        processedAttachments.add(uri)
+                                    } else {
+                                        val mimeType = getMimeType(editContext, uri) ?: ""
+                                        if (mimeType.startsWith("image/")) {
+                                            val (base64Uri, error) = convertImageToBase64(editContext, uri)
+                                            if (base64Uri != null) {
+                                                processedAttachments.add(Uri.parse(base64Uri))
+                                            } else {
+                                                // If conversion fails, keep original URI
+                                                processedAttachments.add(uri)
+                                            }
+                                        } else {
+                                            // For videos, audio, and other files, keep as URI
+                                            processedAttachments.add(uri)
+                                        }
+                                    }
+                                }
+                                
+                                val lessonToSave = updated.copy(
+                                    attachments = processedAttachments,
+                                    lastUpdated = System.currentTimeMillis()
+                                )
+                                
+                                val result = lessonRepository.saveLesson(lessonToSave, adminEmail, isNew = false)
+                                withContext(Dispatchers.Main) {
+                                    result.onSuccess {
+                                        // Update UI immediately
+                                        val i = allLessons.indexOfFirst { it.id == updated.id }
+                                        if (i != -1) {
+                                            allLessons[i] = lessonToSave
+                                        }
+                                        Toast.makeText(editContext, "Lesson updated", Toast.LENGTH_SHORT).show()
+                                        navController.popBackStack()
+                                        // Refresh from Firestore to ensure sync
+                                        scope.launch(Dispatchers.IO) {
+                                            val refreshResult = lessonRepository.getLessons()
+                                            refreshResult.onSuccess { lessons ->
+                                                withContext(Dispatchers.Main) {
+                                                    allLessons.clear()
+                                                    allLessons.addAll(lessons)
+                                                }
+                                            }
+                                        }
+                                    }.onFailure { e ->
+                                        Toast.makeText(editContext, "Failed to update lesson: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
-                            navController.popBackStack()
                         })
                 }
             }
@@ -303,8 +540,16 @@ fun LessonListScreen(
     var sortSelection by rememberSaveable { mutableStateOf("Latest") }
 
     val deleteDialog = remember { mutableStateOf<Pair<Boolean, String?>>(false to null) }
+    val isLoading = remember { mutableStateOf(false) }
     val allSortOptions = listOf("Latest", "Oldest")
     val sortOptions = remember { mutableStateListOf(*allSortOptions.toTypedArray()) }
+    
+    // Hide loading indicator when lessons list changes (after delete completes)
+    LaunchedEffect(lessons.size) {
+        if (isLoading.value) {
+            isLoading.value = false
+        }
+    }
 
     val filtered = lessons.filter { lesson ->
         val q = searchQuery.trim().lowercase()
@@ -348,15 +593,6 @@ fun LessonListScreen(
         Row(
             verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
         ) {
-            val searchModifier =
-                Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .padding(end = 8.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.White, RoundedCornerShape(50))
-                    .shadow(2.dp, RoundedCornerShape(50))
-
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -366,7 +602,13 @@ fun LessonListScreen(
                         Icons.Default.Search, contentDescription = "Search", tint = Color.Black
                     )
                 },
-                modifier = searchModifier,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .padding(end = 8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White, RoundedCornerShape(50))
+                    .shadow(2.dp, RoundedCornerShape(50)),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { }),
@@ -432,18 +674,52 @@ fun LessonListScreen(
             listState.animateScrollToItem(0)
         }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            state = listState
-        ) {
-            items(filtered, key = { it.id }) { lesson ->
-                LessonCard(
-                    lesson = lesson,
-                    onEdit = { onEditLesson(lesson.id) },
-                    onDelete = { deleteDialog.value = true to lesson.id })
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .weight(1f)) {
+            if (isLoading.value) {
+                // Show loading indicator
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.Black,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    state = listState
+                ) {
+                    if (filtered.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    if (searchQuery.isBlank()) "No lessons available yet." else "No lessons found.",
+                                    textAlign = TextAlign.Center,
+                                    color = MutedText,
+                                    fontFamily = InterFontFamily
+                                )
+                            }
+                        }
+                    } else {
+                        items(filtered, key = { it.id }) { lesson ->
+                            LessonCard(
+                                lesson = lesson,
+                                onEdit = { onEditLesson(lesson.id) },
+                                onDelete = { deleteDialog.value = true to lesson.id })
+                        }
+                    }
+                }
             }
         }
     }
@@ -458,12 +734,13 @@ fun LessonListScreen(
             onDismiss = { deleteDialog.value = false to null },
             onConfirm = {
                 val idToDelete = deleteDialog.value.second
+                deleteDialog.value = false to null
+                
                 if (idToDelete != null) {
-                    lessons.removeIf { it.id == idToDelete }
+                    // Show loading indicator
+                    isLoading.value = true
                     onDeleteLesson(idToDelete)
                 }
-                deleteDialog.value = false to null
-                Toast.makeText(context, "Lesson deleted", Toast.LENGTH_SHORT).show()
             })
     }
 }
@@ -619,7 +896,18 @@ fun LessonEditorScreen(
     val multiplePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(), onResult = { uris ->
             if (uris.isNotEmpty()) {
-                uris.forEach { uri ->
+                // Edge case: limit attachments to max 20
+                val maxAttachments = 20
+                val currentCount = attachmentsState.size
+                val remainingSlots = maxAttachments - currentCount
+                
+                if (remainingSlots <= 0) {
+                    Toast.makeText(context, "Maximum $maxAttachments attachments allowed", Toast.LENGTH_SHORT).show()
+                    return@rememberLauncherForActivityResult
+                }
+                
+                val urisToAdd = uris.take(remainingSlots)
+                urisToAdd.forEach { uri ->
                     try {
                         context.contentResolver.takePersistableUriPermission(
                             uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -627,26 +915,47 @@ fun LessonEditorScreen(
                     } catch (_: Exception) {
                     }
                 }
-                attachmentsState.addAll(uris)
-                Toast.makeText(context, "Files selected: ${uris.size}", Toast.LENGTH_SHORT).show()
+                attachmentsState.addAll(urisToAdd)
+                
+                if (uris.size > remainingSlots) {
+                    Toast.makeText(context, "Added ${urisToAdd.size} files. Maximum $maxAttachments attachments reached.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Files selected: ${urisToAdd.size}", Toast.LENGTH_SHORT).show()
+                }
             }
         })
 
     val isSaveEnabled by remember(lessonTitle, lessonContent, tryInput, attachmentsState) {
         derivedStateOf {
-            val requiredFilled =
-                lessonTitle.isNotBlank() && lessonContent.isNotBlank() && tryInput.isNotBlank()
-
+            // Parse try items and validate (like wrong options in quiz)
+            val parsedTryItems = tryInput.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            val hasValidTryItems = parsedTryItems.isNotEmpty() && parsedTryItems.size <= 5
+            
+            // Validate text lengths (like quiz management)
+            val titleTrimmed = lessonTitle.trim()
+            val contentTrimmed = lessonContent.trim()
+            val maxTitleLength = 200
+            val maxContentLength = 5000
+            val isValidTitleLength = titleTrimmed.length <= maxTitleLength
+            val isValidContentLength = contentTrimmed.length <= maxContentLength
+            
             if (!isEditMode) {
-                requiredFilled
+                // For new lessons, require all fields filled (like quiz)
+                isValidTitleLength && titleTrimmed.isNotEmpty() &&
+                isValidContentLength && contentTrimmed.isNotEmpty() &&
+                hasValidTryItems
             } else {
-                val titleChanged = lessonTitle.trim() != lesson.title.trim()
-                val contentChanged = lessonContent.trim() != lesson.content.trim()
-                val tryChanged =
-                    tryInput.split(",").map { it.trim() } != lesson.tryItems.map { it.trim() }
+                // For edit mode: allow spaces - just check length limits and if any change detected
+                // (exactly like quiz management edit mode)
+                val originalTryItemsText = lesson.tryItems.joinToString(", ")
+                val titleChanged = lessonTitle != lesson.title
+                val contentChanged = lessonContent != lesson.content
+                val tryChanged = tryInput != originalTryItemsText
                 val attachmentsChanged = attachmentsState.toList() != lesson.attachments
-
-                requiredFilled && (titleChanged || contentChanged || tryChanged || attachmentsChanged)
+                
+                // Only validate length limits, allow spaces/empty in edit mode
+                isValidTitleLength && isValidContentLength && 
+                (titleChanged || contentChanged || tryChanged || attachmentsChanged)
             }
         }
     }
@@ -681,7 +990,13 @@ fun LessonEditorScreen(
 
         OutlinedTextField(
             value = lessonTitle,
-            onValueChange = { lessonTitle = it },
+            onValueChange = { 
+                if (it.length <= 200) {
+                    lessonTitle = it
+                } else {
+                    Toast.makeText(context, "Title cannot exceed 200 characters", Toast.LENGTH_SHORT).show()
+                }
+            },
             label = { Text("Lesson Title", fontFamily = InterFontFamily, color = MutedText) },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
@@ -690,14 +1005,27 @@ fun LessonEditorScreen(
                 unfocusedTextColor = MutedText,
                 focusedBorderColor = Color.Black,
                 unfocusedBorderColor = MutedText
-            )
+            ),
+            supportingText = {
+                Text(
+                    "${lessonTitle.trim().length}/200 characters",
+                    fontFamily = InterFontFamily,
+                    color = if (lessonTitle.trim().length > 200) Color.Red else Color(0xFF666666)
+                )
+            }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
             value = lessonContent,
-            onValueChange = { lessonContent = it },
+            onValueChange = { 
+                if (it.length <= 5000) {
+                    lessonContent = it
+                } else {
+                    Toast.makeText(context, "Content cannot exceed 5000 characters", Toast.LENGTH_SHORT).show()
+                }
+            },
             label = { Text("Lesson Content", fontFamily = InterFontFamily, color = MutedText) },
             modifier = Modifier
                 .fillMaxWidth()
@@ -709,17 +1037,56 @@ fun LessonEditorScreen(
                 unfocusedTextColor = MutedText,
                 focusedBorderColor = Color.Black,
                 unfocusedBorderColor = MutedText
-            )
+            ),
+            supportingText = {
+                Text(
+                    "${lessonContent.trim().length}/5000 characters",
+                    fontFamily = InterFontFamily,
+                    color = if (lessonContent.trim().length > 5000) Color.Red else Color(0xFF666666)
+                )
+            }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
             value = tryInput,
-            onValueChange = { tryInput = it },
+            onValueChange = { newValue ->
+                // Count current options (before change)
+                val currentOptions = tryInput.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                // Count new options (after change)
+                val newOptions = newValue.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                
+                // Check for duplicate try items (case-insensitive)
+                val duplicateOptions = newOptions.groupingBy { it.lowercase() }.eachCount().filter { it.value > 1 }
+                if (duplicateOptions.isNotEmpty()) {
+                    Toast.makeText(context, "Duplicate try items are not allowed", Toast.LENGTH_SHORT).show()
+                    return@OutlinedTextField
+                }
+                
+                // If already have 5 options, prevent adding more commas
+                if (currentOptions.size >= 5) {
+                    // Count commas in current and new value
+                    val currentCommaCount = tryInput.count { it == ',' }
+                    val newCommaCount = newValue.count { it == ',' }
+                    
+                    // If trying to add a comma when already at 5 options, prevent it
+                    if (newCommaCount > currentCommaCount) {
+                        Toast.makeText(context, "Maximum 5 try items allowed", Toast.LENGTH_SHORT).show()
+                        return@OutlinedTextField
+                    }
+                }
+                
+                // Limit to 5 try items (exactly like quiz management wrong options)
+                if (newOptions.size <= 5) {
+                    tryInput = newValue
+                } else {
+                    Toast.makeText(context, "Maximum 5 try items allowed", Toast.LENGTH_SHORT).show()
+                }
+            },
             label = {
                 Text(
-                    "Try It Out (comma separated)", fontFamily = InterFontFamily, color = MutedText
+                    "Try It Out (comma separated, max 5)", fontFamily = InterFontFamily, color = MutedText
                 )
             },
             modifier = Modifier.fillMaxWidth(),
@@ -730,7 +1097,15 @@ fun LessonEditorScreen(
                 unfocusedTextColor = MutedText,
                 focusedBorderColor = Color.Black,
                 unfocusedBorderColor = MutedText
-            )
+            ),
+            supportingText = {
+                val optionCount = tryInput.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size
+                Text(
+                    "$optionCount/5 items",
+                    fontFamily = InterFontFamily,
+                    color = if (optionCount > 5) Color.Red else Color(0xFF666666)
+                )
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -761,34 +1136,97 @@ fun LessonEditorScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when {
-                            type.startsWith("image") -> AsyncImage(
-                                model = ImageRequest.Builder(context).data(uri).crossfade(true)
-                                    .build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-
+                            type.startsWith("image") -> {
+                                val uriString = uri.toString()
+                                val isBase64 = uriString.startsWith("data:image")
+                                val imageData = if (isBase64) uriString else uri
+                                val bitmap = remember(imageData) {
+                                    if (isBase64) {
+                                        try {
+                                            val base64String = uriString.substringAfter(",")
+                                            if (base64String.isNotEmpty()) {
+                                                val imageBytes = Base64.decode(base64String, Base64.NO_WRAP)
+                                                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                                            } else null
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    } else {
+                                        try {
+                                            val inputStream = context.contentResolver.openInputStream(uri)
+                                            inputStream?.use { BitmapFactory.decodeStream(it) }
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    }
+                                }
+                                
+                                if (bitmap != null) {
+                                    Image(
+                                        bitmap = bitmap.asImageBitmap(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context).data(imageData)
+                                            .crossfade(true).build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+                            
                             type.startsWith("video") -> {
                                 val thumb = remember(uri) { getVideoFrame(context, uri) }
-                                if (thumb != null) Image(
-                                    bitmap = thumb.asImageBitmap(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                                Icon(
-                                    Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .align(Alignment.Center)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                                        .padding(12.dp)
-                                )
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    if (thumb != null) {
+                                        Image(
+                                            bitmap = thumb.asImageBitmap(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        contentDescription = "Play",
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .align(Alignment.Center)
+                                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                            .padding(12.dp)
+                                    )
+                                }
                             }
-
+                            
+                            type.startsWith("audio") -> {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Default.MusicNote,
+                                        contentDescription = "Audio",
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = fileName,
+                                        fontSize = 12.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
+                            
                             else -> Column(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.Center,
@@ -797,6 +1235,7 @@ fun LessonEditorScreen(
                                 Icon(
                                     Icons.Default.InsertDriveFile,
                                     contentDescription = null,
+                                    tint = Color.Black,
                                     modifier = Modifier.size(36.dp)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -859,11 +1298,57 @@ fun LessonEditorScreen(
             onDismiss = { saveDialogVisible.value = false },
             onConfirm = {
                 saveDialogVisible.value = false
-                val parsedTry = tryInput.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                
+                // Edge case handling: parse and validate try items (like quiz management)
+                val parsedTry = tryInput.split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct() // Remove duplicates
+                    .take(5) // Limit to 5
+                
+                val titleTrimmed = lessonTitle.trim()
+                val contentTrimmed = lessonContent.trim()
+                
+                // Validate only for new lessons (edit mode allows spaces)
+                if (!isEditMode) {
+                    if (titleTrimmed.isEmpty() || contentTrimmed.isEmpty()) {
+                        Toast.makeText(context, "Title and content cannot be empty", Toast.LENGTH_SHORT).show()
+                        return@ConfirmStyledDialog
+                    }
+                    
+                    if (parsedTry.isEmpty()) {
+                        Toast.makeText(context, "At least one try item is required", Toast.LENGTH_SHORT).show()
+                        return@ConfirmStyledDialog
+                    }
+                } else {
+                    // Edit mode: validate length limits only
+                    if (titleTrimmed.length > 200) {
+                        Toast.makeText(context, "Title cannot exceed 200 characters", Toast.LENGTH_SHORT).show()
+                        return@ConfirmStyledDialog
+                    }
+                    
+                    if (contentTrimmed.length > 5000) {
+                        Toast.makeText(context, "Content cannot exceed 5000 characters", Toast.LENGTH_SHORT).show()
+                        return@ConfirmStyledDialog
+                    }
+                }
+                
+                // Edge case: validate attachments count
+                if (attachmentsState.size > 20) {
+                    Toast.makeText(context, "Maximum 20 attachments allowed", Toast.LENGTH_SHORT).show()
+                    return@ConfirmStyledDialog
+                }
+                
+                // Edge case: validate try items count
+                if (parsedTry.size > 5) {
+                    Toast.makeText(context, "Maximum 5 try items allowed", Toast.LENGTH_SHORT).show()
+                    return@ConfirmStyledDialog
+                }
+                
                 onSaveConfirmed(
                     lesson.copy(
-                        title = lessonTitle.trim(),
-                        content = lessonContent.trim(),
+                        title = titleTrimmed,
+                        content = contentTrimmed,
                         attachments = attachmentsState.toList(),
                         tryItems = parsedTry,
                         lastUpdated = System.currentTimeMillis()
