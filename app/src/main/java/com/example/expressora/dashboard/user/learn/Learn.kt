@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.camera.core.CameraSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -177,7 +178,16 @@ fun getGifDataUri(context: Context, uri: Uri): String? {
 class LearnActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { LearnApp() }
+        
+        // Validate role before showing screen - redirect to login if not user role
+        RoleValidationUtil.validateRoleAndRedirect(this, "user") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            // Show screen only if role is valid
+            setContent { LearnApp() }
+        }
     }
 }
 

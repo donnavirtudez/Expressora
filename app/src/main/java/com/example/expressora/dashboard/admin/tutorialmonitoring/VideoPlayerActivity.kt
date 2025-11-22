@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -38,11 +39,19 @@ class VideoPlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val videoId = intent.getStringExtra("videoId") ?: ""
-        val videoTitle = intent.getStringExtra("videoTitle") ?: "Video"
-        
-        setContent {
-            VideoPlayerScreen(videoId = videoId, videoTitle = videoTitle)
+        // Validate role before showing screen - redirect to login if not admin role
+        RoleValidationUtil.validateRoleAndRedirect(this, "admin") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            val videoId = intent.getStringExtra("videoId") ?: ""
+            val videoTitle = intent.getStringExtra("videoTitle") ?: "Video"
+            
+            // Show screen only if role is valid
+            setContent {
+                VideoPlayerScreen(videoId = videoId, videoTitle = videoTitle)
+            }
         }
     }
     

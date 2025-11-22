@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -89,8 +90,17 @@ import java.util.concurrent.TimeUnit
 class NotificationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            NotificationScreen()
+        
+        // Validate role before showing screen - redirect to login if not user role
+        RoleValidationUtil.validateRoleAndRedirect(this, "user") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            // Show screen only if role is valid
+            setContent {
+                NotificationScreen()
+            }
         }
     }
 }

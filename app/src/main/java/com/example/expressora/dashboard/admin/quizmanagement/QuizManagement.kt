@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -186,7 +187,15 @@ private val MutedText = Color(0xFF666666)
 class QuizManagementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
+        
+        // Validate role before showing screen - redirect to login if not admin role
+        RoleValidationUtil.validateRoleAndRedirect(this, "admin") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            // Show screen only if role is valid
+            setContent {
             val customSelectionColors = TextSelectionColors(
                 handleColor = Color(0xFFFACC15),
                 backgroundColor = Color(0x33FACC15)
@@ -195,8 +204,9 @@ class QuizManagementActivity : ComponentActivity() {
             CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
                 QuizApp()
             }
-        }
-    }
+            } // Close setContent
+        } // Close validateRoleAndRedirect lambda
+    } // Close onCreate
 }
 
 fun getTimeAgo(time: Long): String {

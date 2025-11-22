@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -82,7 +83,16 @@ import kotlinx.coroutines.withContext
 class QuizActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { QuizApp() }
+        
+        // Validate role before showing screen - redirect to login if not user role
+        RoleValidationUtil.validateRoleAndRedirect(this, "user") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            // Show screen only if role is valid
+            setContent { QuizApp() }
+        }
     }
 }
 

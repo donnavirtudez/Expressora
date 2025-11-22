@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -194,7 +195,15 @@ fun getVideoFrame(context: Context, uri: Uri): Bitmap? {
 class LearningManagementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
+        
+        // Validate role before showing screen - redirect to login if not admin role
+        RoleValidationUtil.validateRoleAndRedirect(this, "admin") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            // Show screen only if role is valid
+            setContent {
             val customSelectionColors = TextSelectionColors(
                 handleColor = Color(0xFFFACC15),
                 backgroundColor = Color(0x33FACC15)
@@ -203,8 +212,9 @@ class LearningManagementActivity : ComponentActivity() {
             CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
                 LessonApp()
             }
-        }
-    }
+            } // Close setContent
+        } // Close validateRoleAndRedirect lambda
+    } // Close onCreate
 }
 
 // Helper function to convert image to base64 data URI

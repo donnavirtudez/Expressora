@@ -11,6 +11,7 @@ import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.activity.result.contract.ActivityResultContracts
@@ -99,48 +100,57 @@ class TranslationActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         
-        // Load preferred translation language from SharedPreferences
-        val sharedPref = getSharedPreferences("user_session", Context.MODE_PRIVATE)
-        val preferredLang = sharedPref.getString("preferred_translation_language", "ENG") ?: "ENG"
-        // Map "ENG" → "English", "FIL" → "Filipino"
-        selectedLanguage = if (preferredLang == "FIL") "Filipino" else "English"
-        
-        tts = TextToSpeech(this, this)
-
-        recognitionEnabled = false
-        handEngineReady = false
-        assetsReady = RecognitionProvider.ensureAssets(this)
-
-        if (assetsReady) {
-            runCatching {
-                handEngine = HandLandmarkerEngine(this).apply {
-                    onResult = { result ->
-                        val hands = HandToFeaturesBridge.extract(result)
-                        val vector = HandToFeaturesBridge.toVec(hands, RecognitionProvider.TWO_HANDS)
-                        recognitionViewModel.onFeatures(vector)
-                    }
-                    onError = { error -> Log.e(HAND_TAG, "Error running hand landmarker", error) }
-                }
-                handEngineReady = true
-            }.onFailure { error ->
-                Log.e(TAG, "Failed to initialize HandLandmarkerEngine", error)
-                handEngineReady = false
-                assetsReady = false
+        // Validate role before showing screen - redirect to login if not user role
+        RoleValidationUtil.validateRoleAndRedirect(this, "user") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
             }
-        } else {
-            Log.w(TAG, "Recognition assets missing; Start Recognition disabled.")
-        }
+            
+            // Continue with initialization only if role is valid
+            enableEdgeToEdge()
+            
+            // Load preferred translation language from SharedPreferences
+            val sharedPref = getSharedPreferences("user_session", Context.MODE_PRIVATE)
+            val preferredLang = sharedPref.getString("preferred_translation_language", "ENG") ?: "ENG"
+            // Map "ENG" → "English", "FIL" → "Filipino"
+            selectedLanguage = if (preferredLang == "FIL") "Filipino" else "English"
+            
+            tts = TextToSpeech(this, this)
 
-        if (ContextCompat.checkSelfPermission(
-                this, Manifest.permission.CAMERA
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
+            recognitionEnabled = false
+            handEngineReady = false
+            assetsReady = RecognitionProvider.ensureAssets(this)
 
-        setContent {
+            if (assetsReady) {
+                runCatching {
+                    handEngine = HandLandmarkerEngine(this).apply {
+                        onResult = { result ->
+                            val hands = HandToFeaturesBridge.extract(result)
+                            val vector = HandToFeaturesBridge.toVec(hands, RecognitionProvider.TWO_HANDS)
+                            recognitionViewModel.onFeatures(vector)
+                        }
+                        onError = { error -> Log.e(HAND_TAG, "Error running hand landmarker", error) }
+                    }
+                    handEngineReady = true
+                }.onFailure { error ->
+                    Log.e(TAG, "Failed to initialize HandLandmarkerEngine", error)
+                    handEngineReady = false
+                    assetsReady = false
+                }
+            } else {
+                Log.w(TAG, "Recognition assets missing; Start Recognition disabled.")
+            }
+
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.CAMERA
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+
+            // Show screen only if role is valid
+            setContent {
             val glossEvent by recognitionViewModel.state.collectAsState()
             var recognitionStarted by remember { mutableStateOf(recognitionEnabled) }
             val canStartRecognition = assetsReady && handEngineReady
@@ -180,8 +190,9 @@ class TranslationActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 cameraAnalyzer = analyzer,
                 startRecognitionEnabled = canStartRecognition && !recognitionStarted
             )
-        }
-    }
+            } // Close setContent
+        } // Close validateRoleAndRedirect lambda
+    } // Close onCreate
 
     override fun onDestroy() {
         super.onDestroy()

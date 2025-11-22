@@ -12,6 +12,7 @@ import android.widget.Toast
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.example.expressora.auth.LoginActivity
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -245,8 +246,14 @@ class CommunitySpaceManagementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Show screen immediately like Community Space, validate inside screen if needed
-        setContent {
+        // Validate role before showing screen - redirect to login if not admin role
+        RoleValidationUtil.validateRoleAndRedirect(this, "admin") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            // Show screen only if role is valid
+            setContent {
             val customSelectionColors = TextSelectionColors(
                 handleColor = Color(0xFFFACC15),
                 backgroundColor = Color(0x33FACC15)
@@ -255,8 +262,9 @@ class CommunitySpaceManagementActivity : ComponentActivity() {
             CompositionLocalProvider(LocalTextSelectionColors provides customSelectionColors) {
                 CommunitySpaceManagementScreen()
             }
-        }
-    }
+            } // Close setContent
+        } // Close validateRoleAndRedirect lambda
+    } // Close onCreate
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)

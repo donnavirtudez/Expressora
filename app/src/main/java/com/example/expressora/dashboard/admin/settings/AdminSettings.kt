@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -109,7 +110,15 @@ private val MutedText = Color(0xFF666666)
 class AdminSettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
+        
+        // Validate role before showing screen - redirect to login if not admin role
+        RoleValidationUtil.validateRoleAndRedirect(this, "admin") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            // Show screen only if role is valid
+            setContent {
             val customSelectionColors = TextSelectionColors(
                 handleColor = Color(0xFFFACC15), backgroundColor = Color(0x33FACC15)
             )
@@ -155,10 +164,11 @@ class AdminSettingsActivity : ComponentActivity() {
                             backStackEntry.arguments?.getString("label") ?: "Change Password"
                         AdminChangePasswordScreen(navController, label)
                     }
-                }
-            }
-        }
-    }
+                } // Close NavHost
+            } // Close CompositionLocalProvider
+            } // Close setContent
+        } // Close validateRoleAndRedirect lambda
+    } // Close onCreate
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

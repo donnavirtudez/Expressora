@@ -17,6 +17,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.expressora.utils.RoleValidationUtil
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -109,30 +110,37 @@ data class DashboardData(
 class AnalyticsDashboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val sampleData = DashboardData(
-            lessons = 12,
-            quizzes = 8,
-            learners = 90,
-            lessonViews = listOf("Alphabets" to 50, "Conversations" to 30),
-            completionRate = 85f,
-            mostViewedLesson = "Alphabets",
-            leastViewedLesson = "Conversations",
-            quizCorrect = 80,
-            quizWrong = 20,
-            mostAttemptedQuiz = "Easy",
-            difficultyDistribution = mapOf(
-                "Easy" to 80, "Medium" to 50, "Difficult" to 30, "Pro" to 20
-            ),
-            perDifficultyCorrect = mapOf(
-                "Easy" to 80, "Medium" to 50, "Difficult" to 30, "Pro" to 20
-            ),
-            perDifficultyWrong = mapOf(
-                "Easy" to 20, "Medium" to 50, "Difficult" to 70, "Pro" to 80
+        
+        // Validate role before showing screen - redirect to login if not admin role
+        RoleValidationUtil.validateRoleAndRedirect(this, "admin") { isValid ->
+            if (!isValid) {
+                return@validateRoleAndRedirect // Will redirect to login
+            }
+            
+            val sampleData = DashboardData(
+                lessons = 12,
+                quizzes = 8,
+                learners = 90,
+                lessonViews = listOf("Alphabets" to 50, "Conversations" to 30),
+                completionRate = 85f,
+                mostViewedLesson = "Alphabets",
+                leastViewedLesson = "Conversations",
+                quizCorrect = 80,
+                quizWrong = 20,
+                mostAttemptedQuiz = "Easy",
+                difficultyDistribution = mapOf(
+                    "Easy" to 80, "Medium" to 50, "Difficult" to 30, "Pro" to 20
+                ),
+                perDifficultyCorrect = mapOf(
+                    "Easy" to 80, "Medium" to 50, "Difficult" to 30, "Pro" to 20
+                ),
+                perDifficultyWrong = mapOf(
+                    "Easy" to 20, "Medium" to 50, "Difficult" to 70, "Pro" to 80
+                )
             )
-        )
-
-        setContent {
+            
+            // Show screen only if role is valid
+            setContent {
             val context = LocalContext.current
             val bgColor = Color(0xFFF8F8F8)
 
@@ -166,8 +174,9 @@ class AnalyticsDashboardActivity : ComponentActivity() {
                     ModernDashboard(sampleData)
                 }
             }
-        }
-    }
+            } // Close setContent
+        } // Close validateRoleAndRedirect lambda
+    } // Close onCreate
 }
 
 @SuppressLint("ContextCastToActivity")
