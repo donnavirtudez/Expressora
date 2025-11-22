@@ -788,7 +788,7 @@ fun ManageQuizScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Generate quiz questions automatically using AI. Questions will be created based on the ${quiz.difficulty.name.lowercase()} difficulty level.\n\nQuestions are about identifying sign language from images - users will see sign language pictures and identify what the sign means or what sign language it is (e.g., \"What does this sign mean?\" - showing a 'thank you' sign).\n\nQuestions cover ASL and FSL signs like \"thank you\", \"hello\", \"goodbye\", \"yes\", \"no\", \"please\", \"sorry\", \"love\", \"family\", etc.\n\nNote: Generated questions will have placeholder images. You can edit each question later to add actual sign language images.",
+                        "Generate quiz questions automatically using AI. Questions will be created based on the ${quiz.difficulty.name.lowercase()} difficulty level.\n\nQuestions are about identifying sign language from images - users will see sign language pictures and identify what the sign means or what sign language it is (e.g., \"What does this sign mean?\" - showing a 'thank you' sign).\n\nQuestions cover ASL and FSL signs like \"thank you\", \"hello\", \"goodbye\", \"yes\", \"no\", \"please\", \"sorry\", \"love\", \"family\", etc.\n\nNote: Generated questions will have placeholder images. You can edit each question later to add actual sign language images and validate them.",
                         color = MutedText
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1172,10 +1172,15 @@ fun QuestionEditorScreen(
             val questionTextTrimmed = questionText.trim()
             val correctAnswerTrimmed = correctAnswer.trim()
             val maxQuestionLength = 500
-            val maxAnswerLength = 100
+            val maxAnswerLength = 10 // Choices must be one word, max 10 characters to fit in design
+            // Validate that answers are one word (no spaces) and within length limit
+            val isValidAnswerLength = correctAnswerTrimmed.length <= maxAnswerLength && 
+                correctAnswerTrimmed.isNotEmpty() && 
+                !correctAnswerTrimmed.contains(" ") // Must be one word only
+            val isValidWrongOptionsLength = wrongOptionsList.all { 
+                it.length <= maxAnswerLength && !it.contains(" ") // Must be one word only
+            }
             val isValidQuestionLength = questionTextTrimmed.length <= maxQuestionLength && questionTextTrimmed.isNotEmpty()
-            val isValidAnswerLength = correctAnswerTrimmed.length <= maxAnswerLength && correctAnswerTrimmed.isNotEmpty()
-            val isValidWrongOptionsLength = wrongOptionsList.all { it.length <= maxAnswerLength }
             
             // Validate image size (base64 max ~5MB = ~6.67MB base64 string)
             val maxImageSize = 6_700_000 // ~5MB in base64
@@ -1339,15 +1344,25 @@ fun QuestionEditorScreen(
 
         OutlinedTextField(
             value = correctAnswer, 
-            onValueChange = { 
-                if (it.length <= 100) {
-                    correctAnswer = it
+            onValueChange = { newValue ->
+                // Only allow one word (no spaces) and max 10 characters
+                val trimmed = newValue.trim()
+                if (trimmed.contains(" ")) {
+                    // Take only the first word if space is detected
+                    val firstWord = trimmed.split(" ")[0]
+                    if (firstWord.length <= 10) {
+                        correctAnswer = firstWord
+                    } else {
+                        Toast.makeText(context, "Answer must be one word, max 10 characters", Toast.LENGTH_SHORT).show()
+                    }
+                } else if (newValue.length <= 10) {
+                    correctAnswer = newValue
                 } else {
-                    Toast.makeText(context, "Answer cannot exceed 100 characters", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Answer must be one word, max 10 characters", Toast.LENGTH_SHORT).show()
                 }
             }, 
             label = {
-                Text("Correct Answer", fontFamily = InterFontFamily, color = Color(0xFF666666))
+                Text("Correct Answer (one word, max 10 chars)", fontFamily = InterFontFamily, color = Color(0xFF666666))
             }, 
             modifier = Modifier.fillMaxWidth(), 
             colors = OutlinedTextFieldDefaults.colors(
@@ -1358,10 +1373,15 @@ fun QuestionEditorScreen(
                 unfocusedBorderColor = Color(0xFF666666)
             ),
             supportingText = {
+                val hasSpace = correctAnswer.contains(" ")
                 Text(
-                    "${correctAnswer.trim().length}/100 characters",
+                    "${correctAnswer.trim().length}/10 characters${if (hasSpace) " (spaces removed)" else ""}",
                     fontFamily = InterFontFamily,
-                    color = if (correctAnswer.trim().length > 100) Color.Red else Color(0xFF666666)
+                    color = when {
+                        correctAnswer.trim().length > 10 -> Color.Red
+                        hasSpace -> Color(0xFFFF9800) // Orange warning for spaces
+                        else -> Color(0xFF666666)
+                    }
                 )
             }
         )
@@ -1371,10 +1391,32 @@ fun QuestionEditorScreen(
         OutlinedTextField(
             value = wrongOptionsText,
             onValueChange = { newValue ->
+                // Process each option: take first word only, max 10 chars
+                val processedOptions = newValue.split(",").map { option ->
+                    val trimmed = option.trim()
+                    if (trimmed.contains(" ")) {
+                        // Take only the first word if space is detected
+                        trimmed.split(" ")[0].take(10)
+                    } else {
+                        trimmed.take(10)
+                    }
+                }
+                
+                // Reconstruct the text with processed options
+                val processedText = processedOptions.joinToString(", ")
+                
                 // Count current options (before change)
                 val currentOptions = wrongOptionsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 // Count new options (after change)
-                val newOptions = newValue.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val newOptions = processedOptions.filter { it.isNotEmpty() }
+                
+                // Check if any option exceeds 10 characters or has spaces (shouldn't happen after processing, but check original)
+                val originalOptions = newValue.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val hasInvalidOptions = originalOptions.any { it.length > 10 || it.contains(" ") }
+                if (hasInvalidOptions && newValue != wrongOptionsText) {
+                    // Show warning but allow the processed version
+                    Toast.makeText(context, "Each option must be one word, max 10 characters", Toast.LENGTH_SHORT).show()
+                }
                 
                 // Check if correct answer is being added to wrong options
                 val correctAnswerTrimmed = correctAnswer.trim()
@@ -1397,7 +1439,7 @@ fun QuestionEditorScreen(
                 if (currentOptions.size >= 3) {
                     // Count commas in current and new value
                     val currentCommaCount = wrongOptionsText.count { it == ',' }
-                    val newCommaCount = newValue.count { it == ',' }
+                    val newCommaCount = processedText.count { it == ',' }
                     
                     // If trying to add a comma when already at 3 options, prevent it
                     if (newCommaCount > currentCommaCount) {
@@ -1408,14 +1450,14 @@ fun QuestionEditorScreen(
                 
                 // Limit to 3 wrong options
                 if (newOptions.size <= 3) {
-                    wrongOptionsText = newValue
+                    wrongOptionsText = processedText
                 } else {
                     Toast.makeText(context, "Maximum 3 wrong options allowed", Toast.LENGTH_SHORT).show()
                 }
             },
             label = {
                 Text(
-                    "Wrong Options (comma separated, max 3)",
+                    "Wrong Options (comma separated, max 3, one word each, max 10 chars)",
                     fontFamily = InterFontFamily,
                     color = Color(0xFF666666)
                 )
@@ -1429,11 +1471,18 @@ fun QuestionEditorScreen(
                 unfocusedBorderColor = Color(0xFF666666)
             ),
             supportingText = {
-                val optionCount = wrongOptionsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size
+                val options = wrongOptionsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val optionCount = options.size
+                val hasInvalidOptions = options.any { it.length > 10 || it.contains(" ") }
+                val invalidCount = options.count { it.length > 10 || it.contains(" ") }
                 Text(
-                    "$optionCount/3 options",
+                    "$optionCount/3 options${if (hasInvalidOptions) " • $invalidCount invalid (max 10 chars, one word)" else ""}",
                     fontFamily = InterFontFamily,
-                    color = if (optionCount > 3) Color.Red else Color(0xFF666666)
+                    color = when {
+                        optionCount > 3 -> Color.Red
+                        hasInvalidOptions -> Color(0xFFFF9800) // Orange warning
+                        else -> Color(0xFF666666)
+                    }
                 )
             }
         )

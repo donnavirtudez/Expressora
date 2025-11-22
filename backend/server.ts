@@ -327,10 +327,10 @@ app.post("/generate-quiz-questions", async (req: Request, res: Response) => {
     console.log(`🤖 Using model: ${modelName} for quiz generation`);
 
     const difficultyDescriptions: { [key: string]: string } = {
-      EASY: "Beginner level - Simple, common sign language vocabulary and basic phrases. Questions should be straightforward with clear visual signs.",
-      MEDIUM: "Intermediate level - More complex signs, phrases, and common expressions. Questions require understanding of context.",
-      DIFFICULT: "Advanced level - Complex signs, idioms, and nuanced expressions. Questions require deeper understanding and interpretation.",
-      PRO: "Expert level - Master-level signs, technical vocabulary, and sophisticated expressions. Questions are challenging and require expertise."
+      EASY: "Beginner level - Simple, common sign language vocabulary and basic phrases. Questions should be straightforward with clear visual signs. Use simple one-word answers like: Yes, No, Love, Home, Good, Bad, Food, Water, Hello, Thanks, Please, Sorry, Happy, Angry, ASL, FSL, Morning, Evening, Night, Today, Tomorrow, Yesterday (all 10 chars or less).",
+      MEDIUM: "Intermediate level - More complex signs, phrases, and common expressions. Questions require understanding of context. Use one-word answers like: Family, Friend, School, Work, Help, Stop, Wait, Come, Go, Stay, Sleep, Eat, Drink, Think, Feel, Know, See, Hear, Want, Need, Person, People, Child, Woman, Man, Woman, Brother, Sister, Mother, Father (all 10 chars or less).",
+      DIFFICULT: "Advanced level - Complex signs, idioms, and nuanced expressions. Questions require deeper understanding and interpretation. Use one-word answers like: Learn, Teach, Study, Write, Read, Speak, Sign, Quiet, Loud, Fast, Slow, Easy, Hard, Right, Wrong, True, False, Here, There, Where, When, What, Who, Why, How, Understand, Remember, Forget, Believe, Accept, Reject (all 10 chars or less).",
+      PRO: "Expert level - Master-level signs, technical vocabulary, and sophisticated expressions. Questions are challenging and require expertise. Use one-word answers like: Expert, Master, Skill, Talent, Gift, Power, Force, Energy, Light, Dark, Bright, Clear, Sharp, Smart, Wise, Brave, Calm, Peace, Hope, Faith, Trust, Honor, Pride, Dream, Goal, Wisdom, Courage, Respect, Dignity, Freedom (all 10 chars or less)."
     };
 
     const difficultyDesc = difficultyDescriptions[difficulty.toUpperCase()] || difficultyDescriptions.EASY;
@@ -356,7 +356,18 @@ Guidelines:
 - Focus on common, everyday signs that users would recognize and learn
 - Format: Each question should have a question text, one correct answer, and 3 wrong options (distractors)
 - Keep question text under 500 characters
-- Keep answers under 100 characters each
+- ABSOLUTELY CRITICAL FOR ALL DIFFICULTY LEVELS (EASY, MEDIUM, DIFFICULT, PRO): Answer choices MUST be EXACTLY ONE WORD ONLY with MAXIMUM 10 CHARACTERS - NO EXCEPTIONS, NO SPACES, NO HYPHENS, NO MULTIPLE WORDS. The design uses boxes (50% screen width, 56dp height) in a 2-column grid layout. If text exceeds 10 characters, users CANNOT READ IT because there is NO ellipsis or scrolling - the text will be CUT OFF and unreadable.
+- THIS RULE APPLIES TO ALL DIFFICULTY LEVELS: Even for PRO difficulty with complex signs, you MUST use one-word answers that are 10 characters or less. For example: "Thank you" → "Thanks" (6), "Goodbye" → "Bye" (3), "I love you" → "Love" (4), "Good morning" → "Morning" (7) or "Hello" (5)
+- STRICT EXAMPLES by difficulty level (all 10 chars or less):
+  * EASY: "Yes" (3), "No" (2), "Love" (4), "Home" (4), "Good" (4), "Bad" (3), "Food" (4), "Water" (5), "Hello" (5), "Thanks" (6), "Please" (6), "Sorry" (5), "Happy" (5), "Morning" (7), "Evening" (7), "Tomorrow" (8), "Yesterday" (9), "ASL" (3), "FSL" (3)
+  * MEDIUM: "Family" (6), "Friend" (6), "School" (6), "Work" (4), "Help" (4), "Stop" (4), "Wait" (4), "Person" (6), "People" (6), "Brother" (7), "Sister" (6), "Mother" (6), "Father" (6), "Child" (5), "Woman" (5), "Man" (3)
+  * DIFFICULT: "Learn" (5), "Teach" (5), "Study" (5), "Write" (5), "Read" (4), "Speak" (5), "Sign" (4), "Quiet" (5), "Understand" (10), "Remember" (8), "Forget" (6), "Believe" (7), "Accept" (6), "Reject" (6)
+  * PRO: "Expert" (6), "Master" (6), "Skill" (5), "Talent" (6), "Power" (5), "Energy" (6), "Wisdom" (6), "Courage" (7), "Respect" (7), "Dignity" (7), "Freedom" (7), "Liberty" (7)
+- NEVER use phrases or multi-word answers. If a sign represents multiple words, choose the MOST IMPORTANT SINGLE WORD. 
+- IMPORTANT: Use the ORIGINAL word if it fits within 10 characters. For example: "Morning" (7 chars) → keep "Morning", "Understand" (10 chars) → keep "Understand", "Tomorrow" (8 chars) → keep "Tomorrow". Only use shortcuts/alternatives if the word exceeds 10 characters.
+- Examples of when to shortcut: "Goodbye" (7 chars but common to use "Bye" 3 chars), "Thank you" (phrase) → "Thanks" (6 chars). But "Morning" (7 chars) should stay as "Morning", not "Hello".
+- Before returning JSON, manually count EVERY character in EVERY choice to ensure it's exactly 10 or fewer characters.
+- IF YOU CANNOT FIND A ONE-WORD ANSWER THAT IS 10 CHARACTERS OR LESS, choose a different sign/question that allows for a shorter answer.
 - Wrong options should be plausible but clearly incorrect
 - Wrong options should not be duplicates of each other or the correct answer
 - Make questions relevant to the Expressora app context - a mobile application for learning both ASL and FSL through visual sign identification
@@ -365,11 +376,24 @@ Return ONLY a valid JSON array with this exact structure:
 [
   {
     "question": "Question text here (phrased as if user is looking at a sign image)",
-    "correctAnswer": "Correct answer here (the meaning/word/phrase/sign language)",
-    "wrongOptions": ["Wrong option 1", "Wrong option 2", "Wrong option 3"]
+    "correctAnswer": "Hello",
+    "wrongOptions": ["Thanks", "Yes", "Love"]
   },
   ...
 ]
+
+FINAL CRITICAL REMINDER: ALL answer choices (correctAnswer and wrongOptions) for ALL difficulty levels (EASY, MEDIUM, DIFFICULT, PRO) MUST be EXACTLY ONE WORD ONLY with MAXIMUM 10 CHARACTERS. NO PHRASES, NO MULTIPLE WORDS, NO SPACES, NO HYPHENS. Users CANNOT read choices that exceed 10 characters - there is no ellipsis, no scrolling, text will be cut off. 
+
+Examples of required transformations:
+- "Thank you" → "Thanks" (6 chars)
+- "Goodbye" → "Bye" (3 chars)  
+- "I love you" → "Love" (4 chars)
+- "Good morning" → "Morning" (7 chars) - NOW ALLOWED with 10 char limit
+- "See you later" → "Later" (5 chars) or "Bye" (3 chars)
+- "How are you" → "How" (3 chars) or "Fine" (4 chars)
+- "I understand" → "Understand" (10 chars) - NOW ALLOWED
+
+Before returning JSON, count every character in every choice. If any choice is longer than 10 characters or contains spaces, you MUST replace it with a shorter one-word alternative. This applies to EASY, MEDIUM, DIFFICULT, and PRO difficulty levels equally.
 
 Make sure the JSON is valid and can be parsed. Do not include any explanation or markdown formatting, just the JSON array.`;
 
@@ -394,14 +418,85 @@ Make sure the JSON is valid and can be parsed. Do not include any explanation or
       throw new Error("Invalid response format from AI");
     }
 
-    // Validate each question has required fields
-    const validQuestions = questions.filter((q: any) => 
-      q.question && 
-      q.correctAnswer && 
-      Array.isArray(q.wrongOptions) && 
-      q.wrongOptions.length >= 1 &&
-      q.wrongOptions.length <= 3
-    );
+    // Helper function to validate and fix choices (one word, max 10 characters)
+    // IMPORTANT: Preserve original word if it fits (10 chars or less), only shortcut if it exceeds 10
+    const validateAndFixChoice = (choice: string, fallbackOptions: string[] = ["Yes", "No", "Love", "Home", "Good"]): string => {
+      if (!choice) return fallbackOptions[0]; // Default fallback
+      
+      let cleaned = choice.trim();
+      
+      // Remove any spaces, hyphens, and take only the first word
+      const firstWord = cleaned.split(/[\s\-]+/)[0];
+      
+      // If the word is 10 characters or less and is a single word, keep it as is
+      if (firstWord.length <= 10 && !firstWord.includes(" ")) {
+        return firstWord;
+      }
+      
+      // Only if it exceeds 10 characters, try to find a shorter alternative
+      if (firstWord.length > 10) {
+        // Try to find a shorter synonym or use fallback
+        // Only apply shortcuts for words that are too long
+        const alternatives: { [key: string]: string } = {
+          "Goodbye": "Bye",
+          "Welcome": "Hello",
+          "Afternoon": "Noon",
+        };
+        
+        const lowerFirst = firstWord.toLowerCase();
+        if (alternatives[firstWord]) {
+          cleaned = alternatives[firstWord];
+        } else if (lowerFirst.startsWith("goodbye")) {
+          cleaned = "Bye";
+        } else {
+          // Last resort: truncate only if no alternative found
+          cleaned = firstWord.substring(0, 10);
+          console.warn(`⚠️ Choice "${choice}" was too long (${firstWord.length} chars) and truncated to "${cleaned}". AI should have generated a shorter word.`);
+        }
+      } else {
+        // If it's 10 or less but has spaces, just take first word
+        cleaned = firstWord;
+      }
+      
+      // Ensure it's not empty
+      if (cleaned.length === 0) {
+        cleaned = fallbackOptions[0];
+      }
+      
+      // Final check - should never exceed 10, but double-check
+      if (cleaned.length > 10) {
+        cleaned = cleaned.substring(0, 10);
+        console.warn(`⚠️ Choice "${choice}" still exceeded 10 chars after processing. Final: "${cleaned}"`);
+      }
+      
+      return cleaned;
+    };
+
+    // Validate each question has required fields and fix choices
+    const validQuestions = questions
+      .filter((q: any) =>
+        q.question &&
+        q.correctAnswer &&
+        Array.isArray(q.wrongOptions) &&
+        q.wrongOptions.length >= 1 &&
+        q.wrongOptions.length <= 3
+      )
+      .map((q: any) => ({
+        question: q.question.trim(),
+        correctAnswer: validateAndFixChoice(q.correctAnswer),
+        wrongOptions: q.wrongOptions
+          .map((opt: string) => validateAndFixChoice(opt))
+          .slice(0, 3)
+          .filter((opt: string, index: number, arr: string[]) => 
+            // Remove duplicates and ensure not same as correct answer
+            opt !== validateAndFixChoice(q.correctAnswer) && 
+            arr.indexOf(opt) === index
+          )
+      }))
+      .filter((q: any) => 
+        // Ensure we still have at least 1 wrong option after filtering
+        q.wrongOptions.length >= 1
+      );
 
     if (validQuestions.length === 0) {
       throw new Error("No valid questions generated");
@@ -411,11 +506,7 @@ Make sure the JSON is valid and can be parsed. Do not include any explanation or
 
     return res.json({
       success: true,
-      questions: validQuestions.map((q: any) => ({
-        question: q.question.trim(),
-        correctAnswer: q.correctAnswer.trim(),
-        wrongOptions: q.wrongOptions.map((opt: string) => opt.trim()).slice(0, 3)
-      }))
+      questions: validQuestions
     });
 
   } catch (error: any) {
@@ -469,29 +560,36 @@ app.post("/generate-lesson", async (req: Request, res: Response) => {
 
 IMPORTANT: ALL lessons MUST be exclusively about American Sign Language (ASL) and/or Filipino Sign Language (FSL/FilSL). Do NOT generate content about spoken languages, general communication, or other topics unrelated to sign language.
 
-Generate exactly ${numLessons} comprehensive learning lesson(s) about "${topic}" that is STRICTLY related to American Sign Language (ASL) and/or Filipino Sign Language (FSL/FilSL).
+CRITICAL: You MUST generate EXACTLY ${numLessons} comprehensive learning lesson(s) about "${topic}" that is STRICTLY related to American Sign Language (ASL) and/or Filipino Sign Language (FSL/FilSL). Do NOT generate fewer than ${numLessons} lessons. The JSON array MUST contain exactly ${numLessons} lesson objects.
 
 Guidelines:
 - MANDATORY: Every lesson MUST focus on ASL and/or FSL sign language learning
 - Lessons should cover: ASL/FSL sign vocabulary, sign meanings, sign phrases, sign grammar, cultural context in deaf communities, differences between ASL and FSL, common ASL/FSL expressions, sign language structure, finger spelling, or sign language conversation
 - Topics can include: Basic ASL/FSL greetings, ASL/FSL numbers, ASL/FSL alphabet, ASL vs FSL differences, ASL/FSL family signs, ASL/FSL emotions, ASL/FSL daily conversation, ASL/FSL grammar rules, etc.
 - Make lessons relevant to the Expressora app context - a mobile application specifically for learning both ASL and FSL
-- Keep lesson titles under 200 characters and clearly indicate if it's about ASL, FSL, or both
+- Keep lesson titles to maximum 100 characters (spaces allowed), and clearly indicate if it's about ASL, FSL, or both
 - Keep lesson content under 5000 characters (comprehensive but concise)
-- Each lesson should have 3-5 "Try It Out" items (practical sign language exercises, practice suggestions, or hands-on activities)
-- Try items should be actionable sign language practice activities related to the lesson topic
-- Focus on practical, hands-on sign language learning
-- Include specific sign language examples, sign descriptions, or sign language concepts
+- tryItems: ONE WORD ONLY, MAX 6 CHARACTERS, NO SPACES. Select 3-5 words from this list:
+  * Greetings/Manners: "Hello" (5), "Thanks" (6), "Please" (6), "Sorry" (5), "Bye" (3), "Good" (4), "Nice" (4), "Hi" (2)
+  * Family: "Family" (6), "Mother" (6), "Father" (6), "Sister" (6), "Child" (5), "Parent" (6), "Baby" (4), "Son" (3)
+  * Emotions: "Happy" (5), "Sad" (3), "Angry" (5), "Love" (4), "Calm" (4), "Brave" (5), "Peace" (5), "Hope" (4), "Joy" (3), "Fear" (4)
+  * Daily Activities: "Eat" (3), "Drink" (5), "Sleep" (5), "Work" (4), "Home" (4), "School" (6), "Study" (5), "Play" (4), "Read" (4), "Write" (5)
+  * Actions: "Learn" (5), "Teach" (5), "Help" (4), "Stop" (4), "Wait" (4), "Come" (4), "Go" (2), "Stay" (4), "Run" (3), "Walk" (4)
+  * Time: "Today" (5), "Now" (3), "Later" (5), "Soon" (4), "Early" (5), "Late" (4), "Night" (5), "Day" (3)
+  * Common: "Yes" (3), "No" (2), "Water" (5), "Food" (4), "Friend" (6), "Person" (6), "People" (6), "Man" (3), "Woman" (5), "ASL" (3), "FSL" (3)
+- Select 3-5 words from the appropriate category based on lesson topic. DO NOT create new words - only use words from the list above.
 
 Return ONLY a valid JSON array with this exact structure:
 [
   {
-    "title": "Lesson title here (must be about ASL/FSL)",
+    "title": "Lesson Title Here (must be about ASL/FSL, max 100 chars, spaces allowed)",
     "content": "Comprehensive lesson content explaining the topic in detail. Include explanations, examples, and educational information about ASL/FSL sign language related to the topic. MUST be about sign language learning.",
-    "tryItems": ["Try item 1 (sign language practice)", "Try item 2 (sign language practice)", "Try item 3 (sign language practice)", "Try item 4 (sign language practice)", "Try item 5 (sign language practice)"]
+    "tryItems": ["Hello", "Thanks", "Please", "Sorry", "Hi"]
   },
   ...
 ]
+
+FINAL CRITICAL REMINDER: tryItems MUST be ONE WORD ONLY, MAX 6 CHARACTERS, NO SPACES. Select 3-5 words from the list above based on lesson topic. DO NOT create new words.
 
 Make sure the JSON is valid and can be parsed. Do not include any explanation or markdown formatting, just the JSON array.`;
 
@@ -566,32 +664,210 @@ Make sure the JSON is valid and can be parsed. Do not include any explanation or
       throw new Error("Invalid response format from AI");
     }
 
-    // Validate each lesson has required fields
-    const validLessons = lessons.filter((l: any) => 
-      l.title && 
-      l.title.trim().length > 0 &&
-      l.title.trim().length <= 200 &&
-      l.content && 
-      l.content.trim().length > 0 &&
-      l.content.trim().length <= 5000 &&
-      Array.isArray(l.tryItems) && 
-      l.tryItems.length >= 3 &&
-      l.tryItems.length <= 5
-    );
+    console.log(`📊 AI generated ${lessons.length} lesson(s), requested ${numLessons}`);
+    
+    // Warn if AI generated fewer lessons than requested
+    if (lessons.length < numLessons) {
+      console.warn(`⚠️  AI only generated ${lessons.length} lesson(s) but ${numLessons} were requested`);
+    }
+
+    // Helper function to get relevant words based on lesson topic
+    const getRelevantWords = (topic: string, title: string): string[] => {
+      const topicLower = (topic + " " + title).toLowerCase();
+      
+      // Greetings/Manners category
+      if (topicLower.includes("greet") || topicLower.includes("hello") || topicLower.includes("hi") || 
+          topicLower.includes("thanks") || topicLower.includes("please") || topicLower.includes("sorry")) {
+        return ["Hello", "Thanks", "Please", "Sorry", "Bye", "Good", "Nice", "Hi"];
+      }
+      
+      // Family category
+      if (topicLower.includes("family") || topicLower.includes("mother") || topicLower.includes("father") ||
+          topicLower.includes("parent") || topicLower.includes("sister") || topicLower.includes("brother") ||
+          topicLower.includes("child") || topicLower.includes("baby")) {
+        return ["Family", "Mother", "Father", "Sister", "Child", "Parent", "Baby", "Son"];
+      }
+      
+      // Emotions category
+      if (topicLower.includes("emotion") || topicLower.includes("feel") || topicLower.includes("happy") ||
+          topicLower.includes("sad") || topicLower.includes("angry") || topicLower.includes("love") ||
+          topicLower.includes("calm") || topicLower.includes("brave")) {
+        return ["Happy", "Sad", "Angry", "Love", "Calm", "Brave", "Peace", "Hope", "Joy", "Fear"];
+      }
+      
+      // Daily Activities category
+      if (topicLower.includes("daily") || topicLower.includes("activity") || topicLower.includes("eat") ||
+          topicLower.includes("drink") || topicLower.includes("sleep") || topicLower.includes("work") ||
+          topicLower.includes("home") || topicLower.includes("school") || topicLower.includes("study")) {
+        return ["Eat", "Drink", "Sleep", "Work", "Home", "School", "Study", "Play", "Read", "Write"];
+      }
+      
+      // Actions category
+      if (topicLower.includes("action") || topicLower.includes("learn") || topicLower.includes("teach") ||
+          topicLower.includes("help") || topicLower.includes("stop") || topicLower.includes("wait") ||
+          topicLower.includes("come") || topicLower.includes("go")) {
+        return ["Learn", "Teach", "Help", "Stop", "Wait", "Come", "Go", "Stay", "Run", "Walk"];
+      }
+      
+      // Time category
+      if (topicLower.includes("time") || topicLower.includes("today") || topicLower.includes("tomorrow") ||
+          topicLower.includes("yesterday") || topicLower.includes("now") || topicLower.includes("later") ||
+          topicLower.includes("night") || topicLower.includes("day")) {
+        return ["Today", "Now", "Later", "Soon", "Early", "Late", "Night", "Day"];
+      }
+      
+      // Default: Common/Greetings (most versatile)
+      return ["Hello", "Thanks", "Please", "Sorry", "Hi", "Good", "Nice", "Yes", "No"];
+    };
+
+    // Helper function to validate and fix tryItems (one word, max 6 characters)
+    const validateAndFixTryItem = (item: string, relevantWords: string[]): string => {
+      if (!item) return relevantWords[0] || "Hello";
+      
+      let cleaned = item.trim();
+      
+      // Remove quotes, punctuation, and extra whitespace
+      cleaned = cleaned.replace(/['"]/g, '').replace(/[^\w\s]/g, ' ').trim();
+      
+      // Extract first word only (handle sentences)
+      const words = cleaned.split(/[\s\-]+/);
+      const firstWord = words[0] || "";
+      
+      // If empty, use fallback from relevant words
+      if (!firstWord || firstWord.length === 0) {
+        return relevantWords[0] || "Hello";
+      }
+      
+      // Approved list of words (max 6 chars)
+      const approvedWords = [
+        "Hello", "Thanks", "Please", "Sorry", "Bye", "Good", "Nice", "Hi",
+        "Family", "Mother", "Father", "Sister", "Child", "Parent", "Baby", "Son",
+        "Happy", "Sad", "Angry", "Love", "Calm", "Brave", "Peace", "Hope", "Joy", "Fear",
+        "Eat", "Drink", "Sleep", "Work", "Home", "School", "Study", "Play", "Read", "Write",
+        "Learn", "Teach", "Help", "Stop", "Wait", "Come", "Go", "Stay", "Run", "Walk",
+        "Today", "Now", "Later", "Soon", "Early", "Late", "Night", "Day",
+        "Yes", "No", "Water", "Food", "Friend", "Person", "People", "Man", "Woman", "ASL", "FSL"
+      ];
+      
+      // Check if first word matches any approved word (case-insensitive)
+      const matchedWord = approvedWords.find(w => w.toLowerCase() === firstWord.toLowerCase());
+      if (matchedWord && matchedWord.length <= 6) {
+        return matchedWord;
+      }
+      
+      // Try to find shorter alternative for common AI mistakes (use relevant words from topic)
+      const getRelevantAlternative = (word: string): string | null => {
+        const lowerWord = word.toLowerCase();
+        // Check if word starts with common patterns and map to relevant category
+        if (lowerWord.startsWith("thank")) {
+          return relevantWords.find(w => w.toLowerCase().includes("thank") || w === "Thanks") || relevantWords[0];
+        } else if (lowerWord.startsWith("goodbye") || lowerWord.startsWith("bye")) {
+          return relevantWords.find(w => w === "Bye" || w.toLowerCase().includes("bye")) || relevantWords[0];
+        } else if (lowerWord.startsWith("good") || lowerWord.startsWith("nice")) {
+          return relevantWords.find(w => w === "Good" || w === "Nice") || relevantWords[0];
+        } else if (lowerWord.startsWith("practice") || lowerWord.startsWith("signing") || 
+                   lowerWord.startsWith("engage") || lowerWord.startsWith("think") || 
+                   lowerWord.startsWith("review") || lowerWord.startsWith("focus")) {
+          // For practice/signing words, use first relevant word from topic
+          return relevantWords[0];
+        }
+        return null;
+      };
+      
+      const lowerFirst = firstWord.toLowerCase();
+      const alternative = getRelevantAlternative(firstWord);
+      if (alternative) {
+        return alternative;
+      }
+      
+      // If word is 6 chars or less and looks valid, check if it's close to an approved word
+      if (firstWord.length <= 6) {
+        // Check for partial matches in approved list
+        const partialMatch = approvedWords.find(w => 
+          w.toLowerCase().includes(lowerFirst) || lowerFirst.includes(w.toLowerCase())
+        );
+        if (partialMatch && partialMatch.length <= 6) {
+          return partialMatch;
+        }
+        // If no match found, use relevant word from topic category
+        const relevantMatch = relevantWords.find(w => w.length <= 6);
+        if (relevantMatch) {
+          console.warn(`⚠️ TryItem "${item}" (${firstWord}) is not in approved list. Using relevant word: "${relevantMatch}"`);
+          return relevantMatch;
+        }
+        // Last resort: use first relevant word
+        return relevantWords[0] || "Hello";
+      }
+      
+      // If word is longer than 6 chars, use relevant word from topic (NO TRUNCATION)
+      const relevantMatch = relevantWords.find(w => w.length <= 6);
+      if (relevantMatch) {
+        console.warn(`⚠️ TryItem "${item}" (${firstWord}, ${firstWord.length} chars) is too long. Using relevant word: "${relevantMatch}"`);
+        return relevantMatch;
+      }
+      return relevantWords[0] || "Hello";
+    };
+
+    // Validate each lesson has required fields and fix tryItems
+    const validLessons = lessons.map((l: any) => {
+      // Get relevant words based on lesson topic and title
+      const relevantWords = getRelevantWords(topic, l.title || "");
+      
+      // Fix tryItems before validation (pass relevant words for context-aware fallbacks)
+      if (Array.isArray(l.tryItems)) {
+        l.tryItems = l.tryItems
+          .map((item: string) => validateAndFixTryItem(item, relevantWords))
+          .filter((item: string) => item.length > 0) // Remove empty items
+          .slice(0, 5); // Limit to 5
+      }
+      
+      return l;
+    }).filter((l: any) => {
+      const titleTrimmed = l.title?.trim() || "";
+      const hasValidTitle = l.title && 
+        titleTrimmed.length > 0 &&
+        titleTrimmed.length <= 100; // Max 100 characters, spaces allowed
+      
+      // Validate try items: one word, max 6 chars, no spaces (after fixing)
+      const hasValidTryItems = Array.isArray(l.tryItems) && 
+        l.tryItems.length >= 3 &&
+        l.tryItems.length <= 5 &&
+        l.tryItems.every((item: string) => {
+          const itemTrimmed = item?.trim() || "";
+          return itemTrimmed.length > 0 &&
+            itemTrimmed.length <= 6 &&
+            !itemTrimmed.includes(" "); // One word only, no spaces
+        });
+      
+      return hasValidTitle &&
+        l.content && 
+        l.content.trim().length > 0 &&
+        l.content.trim().length <= 5000 &&
+        hasValidTryItems;
+    });
 
     if (validLessons.length === 0) {
       throw new Error("No valid lessons generated");
     }
 
-    console.log(`✅ Successfully generated ${validLessons.length} lesson(s)`);
+    console.log(`✅ Successfully validated ${validLessons.length} lesson(s) out of ${lessons.length} generated (requested: ${numLessons})`);
 
     return res.json({
       success: true,
-      lessons: validLessons.map((l: any) => ({
-        title: l.title.trim(),
-        content: l.content.trim(),
-        tryItems: l.tryItems.map((item: string) => item.trim()).slice(0, 5)
-      }))
+      lessons: validLessons.map((l: any) => {
+        const titleTrimmed = l.title.trim();
+        // Ensure title is max 100 chars (additional validation)
+        const finalTitle = titleTrimmed.substring(0, 100);
+        // Try items are already validated and fixed above, just ensure they meet final criteria
+        const finalTryItems = (l.tryItems || [])
+          .filter((item: string) => item && item.length > 0 && item.length <= 6 && !item.includes(" "))
+          .slice(0, 5);
+        return {
+          title: finalTitle,
+          content: l.content.trim(),
+          tryItems: finalTryItems
+        };
+      })
     });
 
   } catch (error: any) {
@@ -761,11 +1037,395 @@ app.get("/test-gemini", async (req: Request, res: Response) => {
   }
 });
 
+// YouTube API endpoints
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY?.trim();
+const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
+
+if (YOUTUBE_API_KEY) {
+  console.log(`✅ YouTube API initialized`);
+  console.log(`🔑 API Key: ${YOUTUBE_API_KEY.substring(0, 10)}...${YOUTUBE_API_KEY.substring(YOUTUBE_API_KEY.length - 4)}`);
+} else {
+  console.warn(`⚠️  YouTube API key not found. Tutorial videos will not work.`);
+  console.warn(`💡 Add YOUTUBE_API_KEY to your .env file to enable YouTube features.`);
+}
+
+// Get videos from a YouTube channel
+app.get("/youtube/videos", async (req: Request, res: Response) => {
+  const { channelId, maxResults = 50 } = req.query;
+
+  if (!YOUTUBE_API_KEY) {
+    return res.status(503).json({
+      success: false,
+      message: "YouTube API key not configured. Please set YOUTUBE_API_KEY in .env file."
+    });
+  }
+
+  if (!channelId || typeof channelId !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "channelId is required"
+    });
+  }
+
+  try {
+    console.log(`📹 Fetching videos from channel: ${channelId} (max: ${maxResults})`);
+    
+    // First, get the uploads playlist ID from the channel
+    const channelUrl = `${YOUTUBE_API_BASE}/channels?part=contentDetails&id=${channelId}&key=${YOUTUBE_API_KEY}`;
+    const channelRes = await fetch(channelUrl);
+    
+    if (!channelRes.ok) {
+      const errorData = await channelRes.json().catch(() => ({}));
+      console.error(`❌ YouTube API error (channel): ${channelRes.status}`, errorData);
+      return res.status(channelRes.status).json({
+        success: false,
+        message: errorData.error?.message || `Failed to fetch channel: ${channelRes.statusText}`
+      });
+    }
+
+    const channelData = await channelRes.json();
+    
+    if (!channelData.items || channelData.items.length === 0) {
+      console.error(`❌ Channel not found: ${channelId}`);
+      return res.status(404).json({
+        success: false,
+        message: "Channel not found"
+      });
+    }
+
+    const uploadsPlaylistId = channelData.items[0].contentDetails?.relatedPlaylists?.uploads;
+    
+    if (!uploadsPlaylistId) {
+      console.error(`❌ No uploads playlist found for channel: ${channelId}`);
+      return res.status(404).json({
+        success: false,
+        message: "Channel has no uploads playlist"
+      });
+    }
+
+    // Get videos from the uploads playlist
+    const videosUrl = `${YOUTUBE_API_BASE}/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=${Math.min(Number(maxResults) || 50, 50)}&key=${YOUTUBE_API_KEY}`;
+    const videosRes = await fetch(videosUrl);
+    
+    if (!videosRes.ok) {
+      const errorData = await videosRes.json().catch(() => ({}));
+      console.error(`❌ YouTube API error (videos): ${videosRes.status}`, errorData);
+      return res.status(videosRes.status).json({
+        success: false,
+        message: errorData.error?.message || `Failed to fetch videos: ${videosRes.statusText}`
+      });
+    }
+
+    const videosData = await videosRes.json();
+    
+    const videos = (videosData.items || []).map((item: any) => {
+      const snippet = item.snippet;
+      const videoId = snippet.resourceId?.videoId || "";
+      const thumbnails = snippet.thumbnails || {};
+      const thumbnailUrl = thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || "";
+      
+      return {
+        id: videoId,
+        title: snippet.title || "",
+        description: snippet.description || "",
+        thumbnailUrl: thumbnailUrl,
+        videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        publishedAt: snippet.publishedAt || "",
+        channelTitle: snippet.channelTitle || ""
+      };
+    });
+
+    console.log(`✅ Successfully fetched ${videos.length} videos from channel ${channelId}`);
+    
+    return res.json({
+      success: true,
+      videos: videos
+    });
+  } catch (error: any) {
+    console.error(`❌ Error fetching YouTube videos:`, error.message);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to fetch videos: ${error.message}`
+    });
+  }
+});
+
+// Get playlists from a YouTube channel
+app.get("/youtube/playlists", async (req: Request, res: Response) => {
+  const { channelId, maxResults = 50 } = req.query;
+
+  if (!YOUTUBE_API_KEY) {
+    return res.status(503).json({
+      success: false,
+      message: "YouTube API key not configured. Please set YOUTUBE_API_KEY in .env file."
+    });
+  }
+
+  if (!channelId || typeof channelId !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "channelId is required"
+    });
+  }
+
+  try {
+    console.log(`📋 Fetching playlists from channel: ${channelId} (max: ${maxResults})`);
+    
+    const playlistsUrl = `${YOUTUBE_API_BASE}/playlists?part=snippet,contentDetails&channelId=${channelId}&maxResults=${Math.min(Number(maxResults) || 50, 50)}&key=${YOUTUBE_API_KEY}`;
+    const playlistsRes = await fetch(playlistsUrl);
+    
+    if (!playlistsRes.ok) {
+      const errorData = await playlistsRes.json().catch(() => ({}));
+      console.error(`❌ YouTube API error (playlists): ${playlistsRes.status}`, errorData);
+      return res.status(playlistsRes.status).json({
+        success: false,
+        message: errorData.error?.message || `Failed to fetch playlists: ${playlistsRes.statusText}`
+      });
+    }
+
+    const playlistsData = await playlistsRes.json();
+    
+    const playlists = (playlistsData.items || []).map((item: any) => {
+      const snippet = item.snippet;
+      const thumbnails = snippet.thumbnails || {};
+      const thumbnailUrl = thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || "";
+      
+      return {
+        playlistId: item.id,
+        title: snippet.title || "",
+        description: snippet.description || "",
+        thumbnailUrl: thumbnailUrl,
+        playlistUrl: `https://www.youtube.com/playlist?list=${item.id}`,
+        publishedAt: snippet.publishedAt || "",
+        channelTitle: snippet.channelTitle || "",
+        itemCount: item.contentDetails?.itemCount || 0
+      };
+    });
+
+    console.log(`✅ Successfully fetched ${playlists.length} playlists from channel ${channelId}`);
+    
+    return res.json({
+      success: true,
+      playlists: playlists
+    });
+  } catch (error: any) {
+    console.error(`❌ Error fetching YouTube playlists:`, error.message);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to fetch playlists: ${error.message}`
+    });
+  }
+});
+
+// Get videos from a YouTube playlist
+app.get("/youtube/playlist-videos", async (req: Request, res: Response) => {
+  const { playlistId, maxResults = 50 } = req.query;
+
+  if (!YOUTUBE_API_KEY) {
+    return res.status(503).json({
+      success: false,
+      message: "YouTube API key not configured. Please set YOUTUBE_API_KEY in .env file."
+    });
+  }
+
+  if (!playlistId || typeof playlistId !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "playlistId is required"
+    });
+  }
+
+  try {
+    console.log(`📹 Fetching videos from playlist: ${playlistId} (max: ${maxResults})`);
+    
+    const videosUrl = `${YOUTUBE_API_BASE}/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=${Math.min(Number(maxResults) || 50, 50)}&key=${YOUTUBE_API_KEY}`;
+    const videosRes = await fetch(videosUrl);
+    
+    if (!videosRes.ok) {
+      const errorData = await videosRes.json().catch(() => ({}));
+      console.error(`❌ YouTube API error (playlist videos): ${videosRes.status}`, errorData);
+      return res.status(videosRes.status).json({
+        success: false,
+        message: errorData.error?.message || `Failed to fetch playlist videos: ${videosRes.statusText}`
+      });
+    }
+
+    const videosData = await videosRes.json();
+    
+    const videos = (videosData.items || []).map((item: any, index: number) => {
+      const snippet = item.snippet;
+      const videoId = snippet.resourceId?.videoId || "";
+      const thumbnails = snippet.thumbnails || {};
+      const thumbnailUrl = thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || "";
+      
+      return {
+        videoId: videoId,
+        title: snippet.title || "",
+        description: snippet.description || "",
+        thumbnailUrl: thumbnailUrl,
+        publishedAt: snippet.publishedAt || "",
+        channelTitle: snippet.channelTitle || "",
+        position: index
+      };
+    });
+
+    console.log(`✅ Successfully fetched ${videos.length} videos from playlist ${playlistId}`);
+    
+    return res.json({
+      success: true,
+      videos: videos
+    });
+  } catch (error: any) {
+    console.error(`❌ Error fetching YouTube playlist videos:`, error.message);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to fetch playlist videos: ${error.message}`
+    });
+  }
+});
+
+// Alternative endpoint for playlist videos (used by some Android code)
+app.get("/youtube-playlist-videos", async (req: Request, res: Response) => {
+  const { playlistId } = req.query;
+
+  if (!YOUTUBE_API_KEY) {
+    return res.status(503).json({
+      success: false,
+      message: "YouTube API key not configured. Please set YOUTUBE_API_KEY in .env file."
+    });
+  }
+
+  if (!playlistId || typeof playlistId !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "playlistId is required"
+    });
+  }
+
+  try {
+    console.log(`📹 Fetching videos from playlist: ${playlistId}`);
+    
+    const videosUrl = `${YOUTUBE_API_BASE}/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50&key=${YOUTUBE_API_KEY}`;
+    const videosRes = await fetch(videosUrl);
+    
+    if (!videosRes.ok) {
+      const errorData = await videosRes.json().catch(() => ({}));
+      console.error(`❌ YouTube API error (playlist videos): ${videosRes.status}`, errorData);
+      return res.status(videosRes.status).json({
+        success: false,
+        message: errorData.error?.message || `Failed to fetch playlist videos: ${videosRes.statusText}`
+      });
+    }
+
+    const videosData = await videosRes.json();
+    
+    const videos = (videosData.items || []).map((item: any, index: number) => {
+      const snippet = item.snippet;
+      const videoId = snippet.resourceId?.videoId || "";
+      const thumbnails = snippet.thumbnails || {};
+      const thumbnailUrl = thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || "";
+      
+      return {
+        videoId: videoId,
+        title: snippet.title || "",
+        description: snippet.description || "",
+        thumbnailUrl: thumbnailUrl,
+        publishedAt: snippet.publishedAt || "",
+        channelTitle: snippet.channelTitle || "",
+        position: index
+      };
+    });
+
+    console.log(`✅ Successfully fetched ${videos.length} videos from playlist ${playlistId}`);
+    
+    return res.json({
+      success: true,
+      videos: videos,
+      playlistId: playlistId,
+      totalVideos: videos.length
+    });
+  } catch (error: any) {
+    console.error(`❌ Error fetching YouTube playlist videos:`, error.message);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to fetch playlist videos: ${error.message}`
+    });
+  }
+});
+
+// Get or update YouTube playlist configuration
+app.get("/youtube-playlist-config", async (req: Request, res: Response) => {
+  try {
+    // Get configuration from Firestore
+    const configDoc = await db.collection("youtube_config").doc("default").get();
+    
+    if (configDoc.exists) {
+      const config = configDoc.data();
+      console.log(`✅ Retrieved YouTube config from Firestore`);
+      return res.json({
+        success: true,
+        playlistId: config?.playlistId || null,
+        channelId: config?.channelId || null,
+        organizationName: config?.organizationName || null,
+        useChannelVideos: config?.useChannelVideos || false
+      });
+    } else {
+      // Return default/empty config
+      console.log(`ℹ️  No YouTube config found, returning defaults`);
+      return res.json({
+        success: true,
+        playlistId: null,
+        channelId: null,
+        organizationName: null,
+        useChannelVideos: false
+      });
+    }
+  } catch (error: any) {
+    console.error(`❌ Error fetching YouTube config:`, error.message);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to fetch config: ${error.message}`
+    });
+  }
+});
+
+app.post("/youtube-playlist-config", async (req: Request, res: Response) => {
+  const { playlistId, channelId, organizationName, useChannelVideos } = req.body;
+
+  try {
+    await db.collection("youtube_config").doc("default").set({
+      playlistId: playlistId || null,
+      channelId: channelId || null,
+      organizationName: organizationName || null,
+      useChannelVideos: useChannelVideos || false,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    console.log(`✅ Updated YouTube config: playlistId=${playlistId}, channelId=${channelId}`);
+    
+    return res.json({
+      success: true,
+      message: "Configuration updated successfully"
+    });
+  } catch (error: any) {
+    console.error(`❌ Error updating YouTube config:`, error.message);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to update config: ${error.message}`
+    });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Expressora Server running at http://localhost:${PORT}`);
   if (genAI) {
     console.log(`✅ AI features enabled. Test API key: http://localhost:${PORT}/test-gemini`);
   } else {
     console.log(`⚠️  AI features disabled. Add GEMINI_API_KEY to .env file.`);
+  }
+  if (YOUTUBE_API_KEY) {
+    console.log(`✅ YouTube API enabled. Test: http://localhost:${PORT}/youtube/videos?channelId=UCuzuc0P8L1fVIeeZrNLnkQA&maxResults=5`);
+  } else {
+    console.log(`⚠️  YouTube API disabled. Add YOUTUBE_API_KEY to .env file.`);
   }
 });

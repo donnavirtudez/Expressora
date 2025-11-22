@@ -200,7 +200,9 @@ fun LearnApp() {
             result.onSuccess { lessons ->
                 withContext(Dispatchers.Main) {
                     allLessons.clear()
-                    allLessons.addAll(lessons)
+                    // Sort by lastUpdated descending (most recent first)
+                    val sortedLessons = lessons.sortedByDescending { it.lastUpdated }
+                    allLessons.addAll(sortedLessons)
                 }
             }.onFailure { e ->
                 withContext(Dispatchers.Main) {
@@ -1014,13 +1016,16 @@ fun DetectionScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp)
                             ) {
                                 Text(
                                     text = if (currentItem.isNotEmpty()) currentItem else "No items",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 22.sp,
-                                    color = Color.Black
+                                    fontSize = 20.sp,
+                                    color = Color.Black,
+                                    maxLines = 1
                                 )
                                 if (showCheck) {
                                     Spacer(modifier = Modifier.width(8.dp))

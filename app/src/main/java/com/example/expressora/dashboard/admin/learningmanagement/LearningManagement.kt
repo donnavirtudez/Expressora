@@ -770,7 +770,7 @@ fun LessonListScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Generate learning lessons automatically using AI. Enter a topic STRICTLY related to American Sign Language (ASL) and/or Filipino Sign Language (FSL).\n\nExamples: \"Basic ASL Greetings\", \"FSL Numbers 1-10\", \"ASL vs FSL Differences\", \"ASL Family Signs\", \"FSL Daily Conversation\", \"ASL Alphabet\", etc.\n\nThe AI will create comprehensive lesson content including title, detailed content, and practical \"Try It Out\" exercises - all focused on sign language learning.\n\nNote: You can add attachments (images, videos) to the generated lesson later.",
+                        "Generate learning lessons automatically using AI. Enter a topic STRICTLY related to American Sign Language (ASL) and/or Filipino Sign Language (FSL).\n\nExamples: \"Basic ASL Greetings\", \"FSL Numbers 1-10\", \"ASL vs FSL Differences\", \"ASL Family Signs\", \"FSL Daily Conversation\", \"ASL Alphabet\", etc.\n\nThe AI will create comprehensive lesson content including title, detailed content, and practical \"Try It Out\" exercises - all focused on sign language learning.\n\nNote: You can add attachments (images, videos) to the generated lesson later and validate them.",
                         color = MutedText,
                         textAlign = TextAlign.Justify,
                         fontSize = 14.sp
@@ -1181,12 +1181,16 @@ fun LessonEditorScreen(
         derivedStateOf {
             // Parse try items and validate (like wrong options in quiz)
             val parsedTryItems = tryInput.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-            val hasValidTryItems = parsedTryItems.isNotEmpty() && parsedTryItems.size <= 5
+            // Validate each try item: one word, max 6 chars, no spaces
+            val validTryItems = parsedTryItems.all { item ->
+                !item.contains(" ") && item.length <= 6
+            }
+            val hasValidTryItems = parsedTryItems.isNotEmpty() && parsedTryItems.size <= 5 && validTryItems
             
             // Validate text lengths (like quiz management)
             val titleTrimmed = lessonTitle.trim()
             val contentTrimmed = lessonContent.trim()
-            val maxTitleLength = 200
+            val maxTitleLength = 100
             val maxContentLength = 5000
             val isValidTitleLength = titleTrimmed.length <= maxTitleLength
             val isValidContentLength = contentTrimmed.length <= maxContentLength
@@ -1242,12 +1246,14 @@ fun LessonEditorScreen(
 
         OutlinedTextField(
             value = lessonTitle,
-            onValueChange = { 
-                if (it.length <= 200) {
-                    lessonTitle = it
-                } else {
-                    Toast.makeText(context, "Title cannot exceed 200 characters", Toast.LENGTH_SHORT).show()
+            onValueChange = { newValue ->
+                // Validate: max 100 characters, spaces allowed
+                val trimmed = newValue.trim()
+                if (trimmed.length > 100) {
+                    Toast.makeText(context, "Title cannot exceed 100 characters", Toast.LENGTH_SHORT).show()
+                    return@OutlinedTextField
                 }
+                lessonTitle = newValue
             },
             label = { Text("Lesson Title", fontFamily = InterFontFamily, color = MutedText) },
             modifier = Modifier.fillMaxWidth(),
@@ -1259,10 +1265,12 @@ fun LessonEditorScreen(
                 unfocusedBorderColor = MutedText
             ),
             supportingText = {
+                val trimmed = lessonTitle.trim()
+                val isValid = trimmed.length <= 100
                 Text(
-                    "${lessonTitle.trim().length}/200 characters",
+                    "${trimmed.length}/100 characters",
                     fontFamily = InterFontFamily,
-                    color = if (lessonTitle.trim().length > 200) Color.Red else Color(0xFF666666)
+                    color = if (isValid) Color(0xFF666666) else Color.Red
                 )
             }
         )
@@ -1309,6 +1317,18 @@ fun LessonEditorScreen(
                 // Count new options (after change)
                 val newOptions = newValue.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 
+                // Validate each try item: one word, max 6 chars, no spaces
+                for (option in newOptions) {
+                    if (option.contains(" ")) {
+                        Toast.makeText(context, "Each try item must be one word only (no spaces)", Toast.LENGTH_SHORT).show()
+                        return@OutlinedTextField
+                    }
+                    if (option.length > 6) {
+                        Toast.makeText(context, "Each try item cannot exceed 6 characters", Toast.LENGTH_SHORT).show()
+                        return@OutlinedTextField
+                    }
+                }
+                
                 // Check for duplicate try items (case-insensitive)
                 val duplicateOptions = newOptions.groupingBy { it.lowercase() }.eachCount().filter { it.value > 1 }
                 if (duplicateOptions.isNotEmpty()) {
@@ -1338,7 +1358,7 @@ fun LessonEditorScreen(
             },
             label = {
                 Text(
-                    "Try It Out (comma separated, max 5)", fontFamily = InterFontFamily, color = MutedText
+                    "Try It Out (comma separated, max 5, one word each, max 6 chars)", fontFamily = InterFontFamily, color = MutedText
                 )
             },
             modifier = Modifier.fillMaxWidth(),
@@ -1555,16 +1575,41 @@ fun LessonEditorScreen(
                 val parsedTry = tryInput.split(",")
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
+                    .map { item ->
+                        // Ensure one word, max 6 chars
+                        val trimmed = item.trim()
+                        if (trimmed.contains(" ")) {
+                            trimmed.split(" ")[0].substring(0, minOf(6, trimmed.split(" ")[0].length))
+                        } else {
+                            trimmed.substring(0, minOf(6, trimmed.length))
+                        }
+                    }
                     .distinct() // Remove duplicates
                     .take(5) // Limit to 5
+                
+                // Validate try items: one word, max 6 chars, no spaces
+                for (item in parsedTry) {
+                    if (item.contains(" ")) {
+                        Toast.makeText(context, "Each try item must be one word only (no spaces)", Toast.LENGTH_SHORT).show()
+                        return@ConfirmStyledDialog
+                    }
+                    if (item.length > 6) {
+                        Toast.makeText(context, "Each try item cannot exceed 6 characters", Toast.LENGTH_SHORT).show()
+                        return@ConfirmStyledDialog
+                    }
+                }
                 
                 val titleTrimmed = lessonTitle.trim()
                 val contentTrimmed = lessonContent.trim()
                 
-                // Validate only for new lessons (edit mode allows spaces)
+                // Validate only for new lessons
                 if (!isEditMode) {
                     if (titleTrimmed.isEmpty() || contentTrimmed.isEmpty()) {
                         Toast.makeText(context, "Title and content cannot be empty", Toast.LENGTH_SHORT).show()
+                        return@ConfirmStyledDialog
+                    }
+                    if (titleTrimmed.length > 100) {
+                        Toast.makeText(context, "Title cannot exceed 100 characters", Toast.LENGTH_SHORT).show()
                         return@ConfirmStyledDialog
                     }
                     
@@ -1574,8 +1619,8 @@ fun LessonEditorScreen(
                     }
                 } else {
                     // Edit mode: validate length limits only
-                    if (titleTrimmed.length > 200) {
-                        Toast.makeText(context, "Title cannot exceed 200 characters", Toast.LENGTH_SHORT).show()
+                    if (titleTrimmed.length > 100) {
+                        Toast.makeText(context, "Title cannot exceed 100 characters", Toast.LENGTH_SHORT).show()
                         return@ConfirmStyledDialog
                     }
                     

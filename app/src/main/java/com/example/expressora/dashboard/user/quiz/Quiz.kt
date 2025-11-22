@@ -94,12 +94,12 @@ fun QuizApp() {
     val sharedPref = remember { context.getSharedPreferences("user_session", Context.MODE_PRIVATE) }
     val userEmail = remember { sharedPref.getString("user_email", "") ?: "" }
     val userRole = remember { sharedPref.getString("user_role", "user") ?: "user" }
-    
+
     var selectedDifficulty by remember { mutableStateOf("") }
     var currentQuiz by remember { mutableStateOf<Quiz?>(null) }
     var userBestScores by remember { mutableStateOf<Map<String, QuizAttempt?>>(emptyMap()) }
     var isLoadingQuizzes by remember { mutableStateOf(false) }
-    
+
     // Load user's best scores for each difficulty
     LaunchedEffect(userEmail) {
         if (userEmail.isNotEmpty()) {
@@ -155,7 +155,7 @@ fun QuizApp() {
                             // Load quiz and check for progress
                             CoroutineScope(Dispatchers.IO).launch {
                                 val userId = getUserIdFromEmail(userEmail, userRole)
-                                
+
                                 // Check if level is unlocked
                                 if (userId != null) {
                                     val isUnlocked = when (difficulty) {
@@ -174,7 +174,7 @@ fun QuizApp() {
                                         }
                                         else -> false
                                     }
-                                    
+
                                     if (!isUnlocked) {
                                         withContext(Dispatchers.Main) {
                                             val previousLevel = when (difficulty) {
@@ -187,12 +187,12 @@ fun QuizApp() {
                                         }
                                         return@launch
                                     }
-                                    
+
                                     // Check if level is already perfect (prevent retake)
                                     val bestResult = userQuizRepository.getUserBestScore(userId, difficulty)
                                     bestResult.onSuccess { bestAttempt ->
                                         val isPerfect = bestAttempt != null && (bestAttempt.percentage ?: 0.0) >= 100.0
-                                        
+
                                         if (isPerfect) {
                                             withContext(Dispatchers.Main) {
                                                 Toast.makeText(context, "You already have a perfect score in $difficulty level! Next level is unlocked.", Toast.LENGTH_LONG).show()
@@ -201,9 +201,9 @@ fun QuizApp() {
                                         }
                                     }
                                 }
-                                
+
                                 val quizResult = userQuizRepository.getQuizByDifficulty(difficulty)
-                                
+
                                 withContext(Dispatchers.Main) {
                                     quizResult.onSuccess { quiz ->
                                         if (quiz != null && quiz.questions.isNotEmpty()) {
@@ -215,34 +215,34 @@ fun QuizApp() {
                                                         // Check if quiz was updated (different question count or IDs)
                                                         val currentQuestionIds = quiz.questions.map { it.id }.toSet()
                                                         val savedQuestionIds = progress.questionOrder.toSet()
-                                                        
+
                                                         // If quiz structure changed (questions added/removed/changed), reset progress
-                                                        val quizWasUpdated = currentQuestionIds != savedQuestionIds || 
-                                                                             quiz.questions.size != progress.totalQuestions
-                                                        
+                                                        val quizWasUpdated = currentQuestionIds != savedQuestionIds ||
+                                                                quiz.questions.size != progress.totalQuestions
+
                                                         if (quizWasUpdated) {
                                                             // Quiz was updated - delete old progress and start fresh
                                                             val oldQuestionCount = progress.totalQuestions
                                                             val newQuestionCount = quiz.questions.size
-                                                            
+
                                                             withContext(Dispatchers.IO) {
                                                                 userQuizRepository.deleteQuizProgress(userId, difficulty)
                                                             }
-                                                            
+
                                                             // Show notification to user with specific details
                                                             val message = if (oldQuestionCount != newQuestionCount) {
                                                                 "Quiz updated: $oldQuestionCount → $newQuestionCount questions. Starting fresh with the latest version."
                                                             } else {
                                                                 "Quiz was updated. Starting fresh with the latest version."
                                                             }
-                                                            
+
                                                             // Show toast notification
                                                             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                                                            
+
                                                             // Start fresh with shuffled questions
                                                             val shuffledQuestions = quiz.questions.shuffled().toMutableList()
                                                             currentQuiz = quiz.copy(questions = shuffledQuestions)
-                                                            
+
                                                             // Small delay to ensure toast is visible before navigation
                                                             CoroutineScope(Dispatchers.Main).launch {
                                                                 delay(500) // 500ms delay
@@ -254,7 +254,7 @@ fun QuizApp() {
                                                             val orderedQuestions = progress.questionOrder.mapNotNull { qId ->
                                                                 quiz.questions.find { it.id == qId }
                                                             }.toMutableList()
-                                                            
+
                                                             // Handle invalid question IDs - if progress has invalid IDs, reset progress
                                                             if (orderedQuestions.isEmpty() || orderedQuestions.size < progress.questionOrder.size) {
                                                                 // Some question IDs are invalid - reset progress and start fresh
@@ -329,7 +329,7 @@ fun QuizApp() {
                                     if (userId != null && quiz.id.isNotEmpty()) {
                                         // Delete progress since quiz is completed
                                         userQuizRepository.deleteQuizProgress(userId, selectedDifficulty)
-                                        
+
                                         val percentage = (score.toDouble() / totalQuestions.toDouble()) * 100.0
                                         val attempt = QuizAttempt(
                                             userId = userId,
@@ -342,7 +342,7 @@ fun QuizApp() {
                                             answers = answers
                                         )
                                         userQuizRepository.saveQuizAttempt(attempt)
-                                        
+
                                         // Refresh best score
                                         val bestResult = userQuizRepository.getUserBestScore(userId, selectedDifficulty)
                                         var isPerfect = false
@@ -352,7 +352,7 @@ fun QuizApp() {
                                                 isPerfect = bestAttempt != null && (bestAttempt.percentage ?: 0.0) >= 100.0
                                             }
                                         }
-                                        
+
                                         // Create notification for quiz completion
                                         val notificationRepository = com.example.expressora.backend.NotificationRepository()
                                         val difficultyDisplay = when (selectedDifficulty.uppercase()) {
@@ -362,7 +362,7 @@ fun QuizApp() {
                                             "PRO" -> "Pro"
                                             else -> selectedDifficulty
                                         }
-                                        
+
                                         // Check if all levels are perfect
                                         val allLevelsPerfect = withContext(Dispatchers.IO) {
                                             val difficulties = listOf("Easy", "Medium", "Difficult", "Pro")
@@ -371,7 +371,7 @@ fun QuizApp() {
                                             }
                                             allAttempts.size == 4 && allAttempts.all { (it.percentage ?: 0.0) >= 100.0 }
                                         }
-                                        
+
                                         if (isPerfect) {
                                             // Perfect score notification
                                             val perfectNotification = com.example.expressora.models.Notification(
@@ -384,7 +384,7 @@ fun QuizApp() {
                                                 createdAt = java.util.Date()
                                             )
                                             notificationRepository.createNotification(perfectNotification)
-                                            
+
                                             // Check if all levels are perfect
                                             if (allLevelsPerfect) {
                                                 val allPerfectNotification = com.example.expressora.models.Notification(
@@ -446,7 +446,7 @@ fun QuizDifficultyScreen(
     onDifficultySelected: (String) -> Unit
 ) {
     val difficulties = listOf("Easy", "Medium", "Difficult", "Pro")
-    
+
     // Helper function to check if level is unlocked
     fun isLevelUnlocked(difficulty: String): Boolean {
         return when (difficulty) {
@@ -466,13 +466,13 @@ fun QuizDifficultyScreen(
             else -> false
         }
     }
-    
+
     // Helper function to check if level is perfect (100%)
     fun isLevelPerfect(difficulty: String): Boolean {
         val attempt = userBestScores[difficulty]
         return attempt != null && (attempt.percentage ?: 0.0) >= 100.0
     }
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -493,14 +493,14 @@ fun QuizDifficultyScreen(
             val totalQuestions = bestAttempt?.totalQuestions ?: 0
             val isUnlocked = isLevelUnlocked(difficulty)
             val isPerfect = isLevelPerfect(difficulty)
-            
+
             DifficultyRow(
                 label = difficulty,
                 isCompleted = isCompleted,
                 bestScore = if (isCompleted) "$bestScore/$totalQuestions" else null,
                 isUnlocked = isUnlocked,
                 isPerfect = isPerfect,
-                onClick = { 
+                onClick = {
                     if (isUnlocked && !isPerfect) {
                         onDifficultySelected(difficulty)
                     }
@@ -511,9 +511,9 @@ fun QuizDifficultyScreen(
 
 @Composable
 fun DifficultyRow(
-    label: String, 
-    isCompleted: Boolean, 
-    bestScore: String?, 
+    label: String,
+    isCompleted: Boolean,
+    bestScore: String?,
     isUnlocked: Boolean = true,
     isPerfect: Boolean = false,
     onClick: () -> Unit
@@ -524,10 +524,10 @@ fun DifficultyRow(
         !isUnlocked -> Color(0xFFE8E8E8) // Soft muted gray for locked - matches app's soft aesthetic
         else -> Color(0xFFF8F8F8) // Default
     }
-    
+
     val textColor = if (!isUnlocked) Color(0xFF999999) else if (isPerfect) Color(0xFF4CAF50) else Color.Black
     val isClickable = isUnlocked && !isPerfect
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -642,7 +642,7 @@ fun QuizQuestionScreen(
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
     var showCorrectAnswer by remember { mutableStateOf(false) }
     val userAnswers = remember { mutableStateListOf<QuizAnswer>() }
-    
+
     // Load existing answers and verify score if continuing
     LaunchedEffect(Unit) {
         if (startIndex > 0 || startScore > 0) {
@@ -667,7 +667,7 @@ fun QuizQuestionScreen(
             }
         }
     }
-    
+
     // Save progress when user navigates away (even if they haven't answered current question)
     // Only save if quiz is not completed (currentQuestionIndex < totalQuestions)
     DisposableEffect(currentQuestionIndex, score, userAnswers.size) {
@@ -676,7 +676,7 @@ fun QuizQuestionScreen(
             val indexToSave = currentQuestionIndex
             val scoreToSave = score
             val answersToSave = userAnswers.toList()
-            
+
             coroutineScope.launch(Dispatchers.IO) {
                 val userId = getUserIdFromEmail(userEmail, userRole)
                 if (userId != null && quiz.id.isNotEmpty() && indexToSave < totalQuestions) {
@@ -698,19 +698,19 @@ fun QuizQuestionScreen(
             }
         }
     }
-    
+
     val currentQuestion = if (currentQuestionIndex < quiz.questions.size) {
         quiz.questions[currentQuestionIndex]
     } else {
         null
     }
-    
+
     // Reset states when question changes
     LaunchedEffect(currentQuestionIndex) {
         selectedAnswer = null
         showCorrectAnswer = false
     }
-    
+
     if (currentQuestion == null) {
         // Quiz completed
         LaunchedEffect(Unit) {
@@ -718,7 +718,7 @@ fun QuizQuestionScreen(
         }
         return
     }
-    
+
     // Create answer options (correct answer + wrong options, shuffled)
     val allAnswers = remember(currentQuestion) {
         (listOf(currentQuestion.correctAnswer) + currentQuestion.wrongOptions).shuffled()
@@ -789,7 +789,7 @@ fun QuizQuestionScreen(
                         } else {
                             currentQuestion.imageUri
                         }
-                        
+
                         // Try to decode as bitmap first for better visibility
                         val bitmap = remember(imageData, context) {
                             if (imageData.toString().startsWith("data:image")) {
@@ -811,7 +811,7 @@ fun QuizQuestionScreen(
                                 }
                             }
                         }
-                        
+
                         if (bitmap != null) {
                             Image(
                                 bitmap = bitmap.asImageBitmap(),
@@ -849,7 +849,7 @@ fun QuizQuestionScreen(
                                 val isSelected = selectedAnswer == answer
                                 val isCorrectAnswer = answer == currentQuestion.correctAnswer
                                 val showAsCorrect = showCorrectAnswer && isCorrectAnswer && !isSelected
-                                
+
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
@@ -875,7 +875,7 @@ fun QuizQuestionScreen(
                                                     // Show correct answer if wrong answer was selected
                                                     showCorrectAnswer = true
                                                 }
-                                                
+
                                                 // Save answer
                                                 userAnswers.add(
                                                     QuizAnswer(
@@ -885,52 +885,55 @@ fun QuizQuestionScreen(
                                                     )
                                                 )
                                             }
-                                        }, 
+                                        }
+                                        .padding(horizontal = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = answer,
-                                        fontSize = 16.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        fontFamily = InterFontFamily
+                                        fontFamily = InterFontFamily,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Center
                                     )
                                 }
 
-                                        if (isSelected) {
-                                            LaunchedEffect(answer) {
-                                                delay(2000) // Show result for 2 seconds (to see correct answer)
-                                                
-                                                selectedAnswer = null
-                                                showCorrectAnswer = false
-                                                if (currentQuestionIndex < totalQuestions - 1) {
-                                                    // Move to next question
-                                                    currentQuestionIndex++
-                                                    // Save progress after moving to next question
-                                                    // Save the NEW current index (the question user is now viewing)
-                                                    coroutineScope.launch(Dispatchers.IO) {
-                                                        val userId = getUserIdFromEmail(userEmail, userRole)
-                                                        if (userId != null && quiz.id.isNotEmpty()) {
-                                                            val questionOrder = quiz.questions.map { it.id }
-                                                            val progress = QuizProgress(
-                                                                userId = userId,
-                                                                userEmail = userEmail,
-                                                                quizId = quiz.id,
-                                                                difficulty = difficulty.uppercase(),
-                                                                currentQuestionIndex = currentQuestionIndex, // Save the question user is now viewing
-                                                                score = score,
-                                                                totalQuestions = totalQuestions,
-                                                                answers = userAnswers.toList(),
-                                                                questionOrder = questionOrder,
-                                                                updatedAt = java.util.Date()
-                                                            )
-                                                            userQuizRepository.saveQuizProgress(progress)
-                                                        }
-                                                    }
-                                                } else {
-                                                    onComplete(score, totalQuestions, userAnswers.toList())
+                                if (isSelected) {
+                                    LaunchedEffect(answer) {
+                                        delay(2000) // Show result for 2 seconds (to see correct answer)
+
+                                        selectedAnswer = null
+                                        showCorrectAnswer = false
+                                        if (currentQuestionIndex < totalQuestions - 1) {
+                                            // Move to next question
+                                            currentQuestionIndex++
+                                            // Save progress after moving to next question
+                                            // Save the NEW current index (the question user is now viewing)
+                                            coroutineScope.launch(Dispatchers.IO) {
+                                                val userId = getUserIdFromEmail(userEmail, userRole)
+                                                if (userId != null && quiz.id.isNotEmpty()) {
+                                                    val questionOrder = quiz.questions.map { it.id }
+                                                    val progress = QuizProgress(
+                                                        userId = userId,
+                                                        userEmail = userEmail,
+                                                        quizId = quiz.id,
+                                                        difficulty = difficulty.uppercase(),
+                                                        currentQuestionIndex = currentQuestionIndex, // Save the question user is now viewing
+                                                        score = score,
+                                                        totalQuestions = totalQuestions,
+                                                        answers = userAnswers.toList(),
+                                                        questionOrder = questionOrder,
+                                                        updatedAt = java.util.Date()
+                                                    )
+                                                    userQuizRepository.saveQuizProgress(progress)
                                                 }
                                             }
+                                        } else {
+                                            onComplete(score, totalQuestions, userAnswers.toList())
                                         }
+                                    }
+                                }
                             }
                         }
                     }
