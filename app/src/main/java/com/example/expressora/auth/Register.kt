@@ -272,7 +272,7 @@ class RegisterActivity : ComponentActivity() {
         otpEmail = email
         otpPassword = password
 
-        val LOCAL_HOST_IP = "192.168.1.22"
+        val LOCAL_HOST_IP = "192.168.1.16"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -308,7 +308,7 @@ class RegisterActivity : ComponentActivity() {
 
     private fun verifyOtp(enteredOtp: String) {
         isLoadingVerify = true
-        val LOCAL_HOST_IP = "192.168.1.22"
+        val LOCAL_HOST_IP = "192.168.1.16"
         val baseUrl = if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
 
         CoroutineScope(Dispatchers.IO).launch {

@@ -42,7 +42,7 @@ class AILessonService {
     }
 
     private fun getBaseUrl(): String {
-        val LOCAL_HOST_IP = "192.168.1.22" // Update this with your local IP
+        val LOCAL_HOST_IP = "192.168.1.16" // Update this with your local IP
         return if (isEmulator()) "http://10.0.2.2:3000" else "http://$LOCAL_HOST_IP:3000"
     }
 
