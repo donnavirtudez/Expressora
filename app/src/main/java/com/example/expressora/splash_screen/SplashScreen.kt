@@ -40,14 +40,24 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.delay
 
 class SplashScreenActivity : ComponentActivity() {
+    private var isRedirecting = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Prevent multiple instances
+        if (!isTaskRoot) {
+            finish()
+            return
+        }
+        
         enableEdgeToEdge()
 
         val currentUser = FirebaseAuth.getInstance().currentUser
         if (currentUser != null) {
+            isRedirecting = true
             redirectToDashboard(currentUser.uid)
-            finish()
+            // Don't finish here - let redirectToDashboard handle it in the callback
             return
         }
 
@@ -56,12 +66,15 @@ class SplashScreenActivity : ComponentActivity() {
     }
 
     private fun checkSavedSession() {
+        if (isRedirecting || isFinishing) return
+        
         val sharedPref = getSharedPreferences("user_session", MODE_PRIVATE)
         val userEmail = sharedPref.getString("user_email", null)
         val userRole = sharedPref.getString("user_role", null)
 
         if (userEmail != null && userRole != null) {
             // User has a saved session, redirect to dashboard
+            isRedirecting = true
             val intent = when (userRole) {
                 "admin" -> Intent(this, CommunitySpaceManagementActivity::class.java)
                 else -> Intent(this, CommunitySpaceActivity::class.java)
@@ -74,8 +87,13 @@ class SplashScreenActivity : ComponentActivity() {
             setContent {
                 ExpressoraTheme {
                     SplashScreen {
-                        startActivity(Intent(this, LoginActivity::class.java))
-                        finish()
+                        if (!isFinishing && !isRedirecting) {
+                            isRedirecting = true
+                            val intent = Intent(this@SplashScreenActivity, LoginActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                        }
                     }
                 }
             }
@@ -83,17 +101,26 @@ class SplashScreenActivity : ComponentActivity() {
     }
 
     private fun redirectToDashboard(uid: String) {
+        if (isFinishing) return
+        
         val firestore = FirebaseFirestore.getInstance()
         firestore.collection("users").document(uid).get().addOnSuccessListener { doc ->
+            if (isFinishing) return@addOnSuccessListener
+            
             val role = doc.getString("role") ?: "user"
             val intent = when (role) {
                 "admin" -> Intent(this, CommunitySpaceManagementActivity::class.java)
                 else -> Intent(this, CommunitySpaceActivity::class.java)
             }
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(intent)
             finish()
         }.addOnFailureListener {
-            startActivity(Intent(this, LoginActivity::class.java))
+            if (isFinishing) return@addOnFailureListener
+            
+            val intent = Intent(this, LoginActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
             finish()
         }
     }

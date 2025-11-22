@@ -2,6 +2,10 @@ package com.example.expressora.backend
 
 import com.example.expressora.models.Notification
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.util.Date
 
@@ -141,6 +145,46 @@ class NotificationRepository {
             Result.success(successCount)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    // Real-time listener for notifications - updates instantly without polling
+    fun getUserNotificationsRealtime(userId: String): Flow<List<Notification>> = callbackFlow {
+        val listenerRegistration = notificationsCollection
+            .whereEqualTo("userId", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("NotificationRepository", "Realtime listener error: ${error.message}", error)
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val notifications = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            val createdAt = (doc.get("createdAt") as? com.google.firebase.Timestamp)?.toDate() ?: Date()
+                            Notification(
+                                id = doc.id,
+                                userId = doc.getString("userId") ?: "",
+                                userEmail = doc.getString("userEmail") ?: "",
+                                title = doc.getString("title") ?: "",
+                                message = doc.getString("message") ?: "",
+                                type = doc.getString("type") ?: "",
+                                isRead = doc.getBoolean("isRead") ?: false,
+                                createdAt = createdAt
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    // Sort by createdAt descending
+                    val sortedNotifications = notifications.sortedByDescending { it.createdAt ?: Date(0) }
+                    trySend(sortedNotifications)
+                }
+            }
+
+        awaitClose {
+            listenerRegistration.remove()
         }
     }
 }

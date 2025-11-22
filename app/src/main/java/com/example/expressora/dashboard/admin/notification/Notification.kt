@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -72,8 +73,10 @@ import com.example.expressora.ui.theme.InterFontFamily
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class NotificationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -211,12 +214,23 @@ fun NotificationScreen() {
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable {
-                                scope.launch {
-                                    notifications.forEach {
-                                        visibilityStates[it.id]?.targetState = false
-                                        delay(100)
+                                scope.launch(Dispatchers.Main) {
+                                    // Collect all IDs first to avoid concurrent modification
+                                    val allIds = notifications.map { it.id }.toList()
+                                    
+                                    // Start all animations instantly with smooth cascade effect
+                                    allIds.forEachIndexed { index, id ->
+                                        visibilityStates[id]?.targetState = false
+                                        // Smooth stagger for beautiful cascade (15ms)
+                                        if (index < allIds.size - 1) {
+                                            delay(15)
+                                        }
                                     }
-                                    delay(400)
+                                    
+                                    // Wait for animations to complete (120ms animation + 30ms buffer)
+                                    delay(150)
+                                    
+                                    // Safely clear all at once
                                     notifications.clear()
                                     visibilityStates.clear()
                                 }
@@ -280,17 +294,26 @@ fun NotificationScreen() {
                             val swipeState = rememberSwipeToDismissBoxState(
                                 initialValue = SwipeToDismissBoxValue.Settled,
                                 confirmValueChange = { value ->
+                                    // Instant confirmation - no delay, immediate response
                                     if (value == SwipeToDismissBoxValue.EndToStart) {
+                                        // Trigger exit animation instantly - zero delay
                                         visibleState.targetState = false
-                                        true
-                                    } else false
+                                        true // Confirm immediately for instant response
+                                    } else {
+                                        false
+                                    }
                                 })
 
+                            // Remove item after exit animation completes smoothly
                             if (!visibleState.currentState && !visibleState.targetState) {
-                                LaunchedEffect(Unit) {
-                                    delay(300)
-                                    notifications.remove(notif)
-                                    visibilityStates.remove(notif.id)
+                                LaunchedEffect(notif.id) {
+                                    // Ultra-fast animation completion (120ms for snappier feel)
+                                    delay(120)
+                                    // Instant removal - no blocking operations
+                                    if (notifications.contains(notif)) {
+                                        notifications.remove(notif)
+                                        visibilityStates.remove(notif.id)
+                                    }
                                 }
                             }
 
@@ -298,11 +321,12 @@ fun NotificationScreen() {
                                 state = swipeState,
                                 enableDismissFromEndToStart = true,
                                 enableDismissFromStartToEnd = false,
-                                backgroundContent = {}) {
+                                backgroundContent = {},
+                                modifier = Modifier.fillMaxWidth()) {
                                 AnimatedVisibility(
                                     visibleState = visibleState,
-                                    enter = fadeIn(tween(300)) + expandVertically(),
-                                    exit = fadeOut(tween(300)) + shrinkVertically(tween(300))
+                                    enter = fadeIn(tween(120, easing = FastOutSlowInEasing)) + expandVertically(tween(120, easing = FastOutSlowInEasing)),
+                                    exit = fadeOut(tween(120, easing = FastOutSlowInEasing)) + shrinkVertically(tween(120, easing = FastOutSlowInEasing))
                                 ) {
                                     NotificationCard(
                                         item = notif,
@@ -311,11 +335,11 @@ fun NotificationScreen() {
                                         textColor = textColor,
                                         subtitleColor = subtitleColor,
                                         onClick = {
-                                            val idx =
-                                                notifications.indexOfFirst { it.id == notif.id }
+                                            // Instant mark as read - no delay
+                                            val idx = notifications.indexOfFirst { it.id == notif.id }
                                             if (idx != -1 && !notifications[idx].isRead) {
-                                                notifications[idx] =
-                                                    notifications[idx].copy(isRead = true)
+                                                // Update state immediately for instant UI feedback
+                                                notifications[idx] = notifications[idx].copy(isRead = true)
                                             }
                                         })
                                 }
@@ -339,12 +363,12 @@ fun NotificationCard(
 ) {
     val backgroundColor by animateColorAsState(
         targetValue = if (item.isRead) readBackground else unreadBackground,
-        animationSpec = tween(300),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "bgColorAnim"
     )
     val iconBackgroundColor by animateColorAsState(
         targetValue = if (item.isRead) readBackground else unreadBackground,
-        animationSpec = tween(300),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "iconColorAnim"
     )
     val icon = item.iconRes ?: R.drawable.expressora_logo

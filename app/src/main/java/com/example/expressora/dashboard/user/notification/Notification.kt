@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -77,6 +78,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.tasks.await
 import com.example.expressora.backend.NotificationRepository
 import com.example.expressora.models.Notification as FirebaseNotification
@@ -177,6 +179,8 @@ fun NotificationScreen() {
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
     val listState = rememberLazyListState()
+    var isClearingAll by remember { mutableStateOf(false) }
+    var lastClearTime by remember { mutableStateOf(0L) }
 
     // Load notifications from Firebase
     fun loadNotifications() {
@@ -232,75 +236,100 @@ fun NotificationScreen() {
         }
     }
 
-    // Load notifications on first launch
-    LaunchedEffect(Unit) {
-        loadNotifications()
-    }
-    
-    // Refresh notifications when user returns to this screen
-    var refreshKey by remember { mutableStateOf(0) }
-    LaunchedEffect(refreshKey) {
-        if (refreshKey > 0) {
-            loadNotifications()
+    // Real-time notification listener - updates instantly without reloading
+    LaunchedEffect(userEmail, userRole) {
+        val userId = withContext(Dispatchers.IO) {
+            getUserIdFromEmail(userEmail, userRole)
         }
-    }
-    
-    // Periodic refresh every 5 seconds when screen is visible
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(5000) // Refresh every 5 seconds
-            loadNotifications()
-        }
-    }
-    
-    // Trigger refresh when screen is disposed (user navigated away)
-    DisposableEffect(Unit) {
-        onDispose {
-            // Increment refresh key so next time screen is shown, it refreshes
-            refreshKey++
+        
+        if (userId != null) {
+            isLoading = true
+            // Start real-time listener for instant updates
+            notificationRepository.getUserNotificationsRealtime(userId)
+                .collectLatest { firebaseNotifications ->
+                    // Update UI instantly on Main thread
+                    withContext(Dispatchers.Main) {
+                        // COMPLETELY IGNORE updates while clearing all to prevent double-trigger
+                        if (isClearingAll) {
+                            return@withContext // Exit immediately, don't process anything
+                        }
+                        
+                        // Ignore updates for 2 seconds after clearing to prevent race conditions
+                        val timeSinceClear = System.currentTimeMillis() - lastClearTime
+                        if (timeSinceClear < 2000 && notifications.isEmpty() && firebaseNotifications.isNotEmpty()) {
+                            return@withContext // Ignore re-adds right after clearing
+                        }
+                        
+                        // If Firebase is empty and local is not, clear local (normal deletion)
+                        if (notifications.isNotEmpty() && firebaseNotifications.isEmpty() && !isClearingAll) {
+                            notifications.clear()
+                            visibilityStates.clear()
+                            firebaseIdMap.clear()
+                            return@withContext
+                        }
+                        
+                        // Only update if there are actual changes to avoid unnecessary recompositions
+                        val currentIds = notifications.mapNotNull { firebaseIdMap[it.id] }.toSet()
+                        val newIds = firebaseNotifications.map { it.id }.toSet()
+                        
+                        // If lists are different, update
+                        if (currentIds != newIds || notifications.size != firebaseNotifications.size) {
+                            // Remove items that no longer exist
+                            val itemsToRemove = notifications.filter { 
+                                val firebaseId = firebaseIdMap[it.id]
+                                firebaseId != null && !firebaseNotifications.any { it.id == firebaseId }
+                            }
+                            itemsToRemove.forEach { notif ->
+                                notifications.remove(notif)
+                                visibilityStates.remove(notif.id)
+                                firebaseIdMap.remove(notif.id)
+                            }
+                            
+                            // Add or update existing items
+                            firebaseNotifications.forEach { firebaseNotif ->
+                                val itemId = firebaseNotif.id.hashCode()
+                                val existingIndex = notifications.indexOfFirst { it.id == itemId }
+                                
+                                if (existingIndex == -1) {
+                                    // New notification - add with animation
+                                    val notificationItem = NotificationItem(
+                                        id = itemId,
+                                        title = firebaseNotif.title,
+                                        message = firebaseNotif.message,
+                                        time = formatTimeAgo(firebaseNotif.createdAt),
+                                        iconRes = null,
+                                        isRead = firebaseNotif.isRead
+                                    )
+                                    notifications.add(0, notificationItem) // Add to top
+                                    firebaseIdMap[itemId] = firebaseNotif.id
+                                    visibilityStates[itemId] = MutableTransitionState(true)
+                                } else {
+                                    // Update existing notification (e.g., read status)
+                                    val existing = notifications[existingIndex]
+                                    if (existing.isRead != firebaseNotif.isRead) {
+                                        notifications[existingIndex] = existing.copy(isRead = firebaseNotif.isRead)
+                                    }
+                                }
+                            }
+                        }
+                        isLoading = false
+                    }
+                }
+        } else {
+            isLoading = false
         }
     }
 
     fun fetchNewNotifications() {
+        // Real-time listener handles updates automatically
+        // This is just for manual refresh if needed
         scope.launch {
             isRefreshing = true
-            withContext(Dispatchers.IO) {
-                val userId = getUserIdFromEmail(userEmail, userRole)
-                if (userId != null) {
-                    val result = notificationRepository.getUserNotifications(userId)
-                    result.onSuccess { firebaseNotifications ->
-                        withContext(Dispatchers.Main) {
-                            notifications.clear()
-                            visibilityStates.clear()
-                            firebaseIdMap.clear()
-                            firebaseNotifications.forEach { firebaseNotif ->
-                                val itemId = firebaseNotif.id.hashCode() // Convert String ID to Int for compatibility
-                                val notificationItem = NotificationItem(
-                                    id = itemId,
-                                    title = firebaseNotif.title,
-                                    message = firebaseNotif.message,
-                                    time = formatTimeAgo(firebaseNotif.createdAt),
-                                    iconRes = null,
-                                    isRead = firebaseNotif.isRead
-                                )
-                                notifications.add(notificationItem)
-                                firebaseIdMap[itemId] = firebaseNotif.id // Map Int id to Firebase String id
-                                visibilityStates[itemId] = MutableTransitionState(true)
-                            }
-                            isRefreshing = false
-                            listState.scrollToItem(0)
-                        }
-                    }.onFailure {
-                        withContext(Dispatchers.Main) {
-                            isRefreshing = false
-                        }
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        isRefreshing = false
-                    }
-                }
-            }
+        }
+        // Real-time listener will update automatically, just reset refresh state
+        scope.launch {
+            delay(500) // Brief delay for visual feedback
+            isRefreshing = false
         }
     }
 
@@ -361,21 +390,53 @@ fun NotificationScreen() {
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable {
-                                scope.launch {
-                                    // Delete all from Firebase
-                                    withContext(Dispatchers.IO) {
-                                        firebaseIdMap.values.forEach { firebaseId ->
-                                            notificationRepository.deleteNotification(firebaseId)
+                                scope.launch(Dispatchers.Main) {
+                                    // Prevent double-trigger - check and set flag immediately
+                                    if (isClearingAll || notifications.isEmpty()) return@launch
+                                    
+                                    // Set flag FIRST to block real-time listener
+                                    isClearingAll = true
+                                    
+                                    // Collect all IDs and Firebase IDs BEFORE clearing
+                                    val allIds = notifications.map { it.id }.toList()
+                                    val allFirebaseIds = allIds.mapNotNull { firebaseIdMap[it] }
+                                    
+                                    // Start all animations instantly with smooth cascade effect
+                                    allIds.forEachIndexed { index, id ->
+                                        visibilityStates[id]?.targetState = false
+                                        // Smooth stagger for beautiful cascade (15ms)
+                                        if (index < allIds.size - 1) {
+                                            delay(15)
                                         }
                                     }
-                                    notifications.forEach {
-                                        visibilityStates[it.id]?.targetState = false
-                                        delay(100)
-                                    }
-                                    delay(400)
+                                    
+                                    // Wait for animations to complete (120ms animation + 30ms buffer)
+                                    delay(150)
+                                    
+                                    // Clear all immediately - this ensures UI updates right away
                                     notifications.clear()
                                     visibilityStates.clear()
                                     firebaseIdMap.clear()
+                                    
+                                    // Record clear time to prevent re-adds
+                                    lastClearTime = System.currentTimeMillis()
+                                    
+                                    // Delete from Firebase in background (non-blocking)
+                                    launch(Dispatchers.IO) {
+                                        allFirebaseIds.forEach { firebaseId ->
+                                            try {
+                                                notificationRepository.deleteNotification(firebaseId)
+                                            } catch (e: Exception) {
+                                                // Ignore errors - don't block UI
+                                            }
+                                        }
+                                        // Keep flag set longer to prevent real-time listener from interfering
+                                        // Wait for Firebase to process all deletions
+                                        delay(2000) // Longer delay to ensure Firebase processes everything
+                                        withContext(Dispatchers.Main) {
+                                            isClearingAll = false
+                                        }
+                                    }
                                 }
                             }
                             .padding(horizontal = 4.dp, vertical = 2.dp)) {
@@ -424,17 +485,11 @@ fun NotificationScreen() {
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             top = 8.dp, bottom = 16.dp
-                        )
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Filter out items that are animating out or fully removed to prevent gaps
-                        val visibleNotifications = notifications.filter { notif ->
-                            val visibleState = visibilityStates[notif.id]
-                            // Only show items that are currently visible and not animating out
-                            visibleState?.currentState == true && visibleState?.targetState == true
-                        }
-                        
                         itemsIndexed(
-                            items = visibleNotifications,
+                            items = notifications.toList(),
                             key = { _, item -> item.id }) { _, notif ->
                             val visibleState = visibilityStates.getOrPut(notif.id) {
                                 MutableTransitionState(true)
@@ -444,33 +499,30 @@ fun NotificationScreen() {
                                 initialValue = SwipeToDismissBoxValue.Settled,
                                 confirmValueChange = { value ->
                                     if (value == SwipeToDismissBoxValue.EndToStart) {
-                                        // Immediately remove from list to prevent spacing issues
+                                        // Start exit animation immediately - instant response
+                                        visibleState.targetState = false
+                                        // Delete from Firebase in background (non-blocking, doesn't affect UI)
                                         val firebaseId = firebaseIdMap[notif.id]
                                         if (firebaseId != null) {
                                             scope.launch(Dispatchers.IO) {
                                                 notificationRepository.deleteNotification(firebaseId)
                                             }
                                         }
-                                        // Remove from lists immediately
-                                        notifications.remove(notif)
-                                        visibilityStates.remove(notif.id)
-                                        firebaseIdMap.remove(notif.id)
                                         true
                                     } else false
                                 })
 
-                            // Add spacing using padding instead of Arrangement.spacedBy
-                            // This prevents gaps when items are removed
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                            ) {
-                                SwipeToDismissBox(
-                                    state = swipeState,
-                                    enableDismissFromEndToStart = true,
-                                    enableDismissFromStartToEnd = false,
-                                    backgroundContent = {}) {
+                            SwipeToDismissBox(
+                                state = swipeState,
+                                enableDismissFromEndToStart = true,
+                                enableDismissFromStartToEnd = false,
+                                backgroundContent = {},
+                                modifier = Modifier.fillMaxWidth()) {
+                                AnimatedVisibility(
+                                    visibleState = visibleState,
+                                    enter = fadeIn(tween(120, easing = FastOutSlowInEasing)) + expandVertically(tween(120, easing = FastOutSlowInEasing)),
+                                    exit = fadeOut(tween(120, easing = FastOutSlowInEasing)) + shrinkVertically(tween(120, easing = FastOutSlowInEasing))
+                                ) {
                                     NotificationCard(
                                         item = notif,
                                         unreadBackground = cardColorUnread,
@@ -478,12 +530,12 @@ fun NotificationScreen() {
                                         textColor = textColor,
                                         subtitleColor = subtitleColor,
                                         onClick = {
-                                            val idx =
-                                                notifications.indexOfFirst { it.id == notif.id }
+                                            // Instant mark as read - no delay, immediate UI update
+                                            val idx = notifications.indexOfFirst { it.id == notif.id }
                                             if (idx != -1 && !notifications[idx].isRead) {
-                                                notifications[idx] =
-                                                    notifications[idx].copy(isRead = true)
-                                                // Mark as read in Firebase
+                                                // Update state immediately for instant visual feedback
+                                                notifications[idx] = notifications[idx].copy(isRead = true)
+                                                // Mark as read in Firebase (background, non-blocking)
                                                 val firebaseId = firebaseIdMap[notif.id]
                                                 if (firebaseId != null) {
                                                     scope.launch(Dispatchers.IO) {
@@ -492,6 +544,20 @@ fun NotificationScreen() {
                                                 }
                                             }
                                         })
+                                }
+                            }
+                            
+                            // Remove item after exit animation completes smoothly
+                            if (!visibleState.currentState && !visibleState.targetState) {
+                                LaunchedEffect(notif.id) {
+                                    // Ultra-fast animation completion (120ms for snappier feel)
+                                    delay(120)
+                                    // Instant removal - no blocking operations
+                                    if (notifications.contains(notif)) {
+                                        notifications.remove(notif)
+                                        visibilityStates.remove(notif.id)
+                                        firebaseIdMap.remove(notif.id)
+                                    }
                                 }
                             }
                         }
@@ -513,12 +579,12 @@ fun NotificationCard(
 ) {
     val backgroundColor by animateColorAsState(
         targetValue = if (item.isRead) readBackground else unreadBackground,
-        animationSpec = tween(300),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "bgColorAnim"
     )
     val iconBackgroundColor by animateColorAsState(
         targetValue = if (item.isRead) readBackground else unreadBackground,
-        animationSpec = tween(300),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "iconColorAnim"
     )
     val icon = item.iconRes ?: R.drawable.expressora_logo
